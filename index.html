@@ -494,7 +494,7 @@ async function initApp(user){
 /* Sincronizzazione Database Supabase */
 async function loadCloudData(){
   if(!supabaseClient) return;
-  let { data: settingsData } = await supabaseClient.from('settings').select('*').single();
+  let { data: settingsData } = await supabaseClient.from('settings').select('*').eq('id', 1).single();
   if(settingsData) state.settings = settingsData;
 
   const tables = ['customers', 'printers', 'spools', 'orders', 'quotes', 'movements', 'files'];
