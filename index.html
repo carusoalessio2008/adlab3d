@@ -55,6 +55,16 @@ button,input,select,textarea{font:inherit;color:inherit}
 .auth-toggle{margin-top:16px;text-align:center;font-size:13px;color:var(--muted)}
 .auth-toggle a{color:var(--accent);text-decoration:none;font-weight:500;cursor:pointer}
 
+/* Modal Popup */
+.modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:100;opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-overlay.open{opacity:1;pointer-events:auto}
+.modal-box{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:24px;width:100%;max-width:450px;box-shadow:0 10px 30px rgba(0,0,0,0.15);display:flex;flex-direction:column;gap:16px;transform:translateY(10px);transition:transform .2s}
+.modal-overlay.open .modal-box{transform:translateY(0)}
+.modal-h{display:flex;justify-content:space-between;align-items:center}
+.modal-h h3{font-size:18px}
+.modal-body{display:flex;flex-direction:column;gap:12px}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+
 /* shell */
 .shell{display:grid;grid-template-columns:232px minmax(0,1fr);gap:30px;max-width:1380px;margin:0 auto;
   padding-block:22px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
@@ -207,7 +217,22 @@ select.st{padding:5px 8px;min-width:118px}
   </div>
 </div>
 
-<!-- APPLICAZIONE PRINCIPALE (nascosta finché non si effettua il login) -->
+<!-- MODALE GENERICO POPUP -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal-box" id="modal-box">
+    <div class="modal-h">
+      <h3 id="modal-title">Titolo</h3>
+      <button class="btn ghost sm" type="button" id="modal-close">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-foot">
+      <button class="btn ghost sm" type="button" id="modal-cancel">Annulla</button>
+      <button class="btn pri sm" type="button" id="modal-save">Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- APPLICAZIONE PRINCIPALE -->
 <div id="app-container" style="display:none;">
   <div class="shell">
     <aside class="side">
@@ -308,7 +333,7 @@ function calc(q){
   return {hrs:hrs,rows:rows,cost:cost,sub:sub,minApplied:minApplied,net:net,vat:vat,total:Math.round((net+vat)*100)/100};
 }
 
-/* ---------- Applicazione Cloud & Gestione Ruoli ---------- */
+/* ---------- Applicazione Cloud & Gestione Modali ---------- */
 (function(){
 'use strict';
 var THEME_KEY='adlab3d-theme';
@@ -332,7 +357,8 @@ let state = {
 var q=null;
 var view='panoramica';
 let isSignUp = false;
-let userRole = 'user'; // Di default utente normale
+let userRole = 'user';
+let activeModalCallback = null;
 
 /* Gestione Autenticazione UI */
 const authScreen = $('#auth-screen');
@@ -394,7 +420,6 @@ async function initApp(user){
   appContainer.style.display = 'block';
   $('#user-email-display').textContent = user.email;
 
-  // Recupera il ruolo dell'utente dalla tabella profiles
   if(supabaseClient){
     let { data } = await supabaseClient
       .from('profiles')
@@ -404,7 +429,6 @@ async function initApp(user){
     if(data) userRole = data.role;
   }
 
-  // Se l'utente è admin, aggiungi la vista Impostazioni nel menu
   if(userRole === 'admin'){
     if(!VIEWS.some(function(v){return v[0]==='impostazioni'})){
       VIEWS.push(['impostazioni', 'Impostazioni']);
@@ -453,8 +477,25 @@ async function deleteData(table, id){
 }
 
 function loadMockData(){
-  state.customers = [{id:uid(), name:'Cliente Esempio', phone:'', email:'', note:''}];
+  state.customers = [{id:uid(), name:'Cliente Esempio', phone:'3331234567', email:'cliente@esempio.it', note:''} ];
 }
+
+/* ---- Gestione Modali (Pop-up) ---- */
+function openModal(title, htmlContent, onSave){
+  $('#modal-title').textContent = title;
+  $('#modal-body').innerHTML = htmlContent;
+  activeModalCallback = onSave;
+  $('#modal-overlay').classList.add('open');
+}
+function closeModal(){
+  $('#modal-overlay').classList.remove('open');
+  activeModalCallback = null;
+}
+$('#modal-close').addEventListener('click', closeModal);
+$('#modal-cancel').addEventListener('click', closeModal);
+$('#modal-save').addEventListener('click', function(){
+  if(activeModalCallback) activeModalCallback();
+});
 
 /* ---- utilità ---- */
 function cname(id){var c=state.customers.find(function(x){return x.id===id});return c?c.name:'—'}
@@ -558,13 +599,17 @@ function updateSummary(){
     '<p class="muted">IVA '+nf(num(q.vat),0)+'% inclusa · imponibile '+eur(r.net)+'</p>'+
     '<div class="bar" aria-hidden="true">'+bar+'</div>'+
     '<dl class="tot"><dt>Costo di produzione</dt><dd class="mono">'+eur(r.cost)+'</dd><dt>Margine</dt><dd class="mono">'+eur(margin)+'</dd><dt>Totale</dt><dd class="mono strong">'+eur(r.total)+'</dd></dl>'+
-    '<div class="sum-acts"><button class="btn pri" type="button" data-action="mkorder">Crea ordine</button></div>';
+    '<div class="sum-acts">'+
+      '<button class="btn" type="button" data-action="saveq">Salva preventivo</button>'+
+      '<button class="btn pri" type="button" data-action="mkorder">Crea ordine</button>'+
+    '</div>';
 }
+function quoteRec(status){var r=calc(q);return {id:uid(),date:todayISO(),q:clone(q),net:r.net,total:r.total,status:status}}
 function histHTML(){
   if(!state.quotes.length)return '<div class="empty">Nessun preventivo salvato.</div>';
-  return '<div class="tw"><table><thead><tr><th>Data</th><th>Lavorazione</th><th>Totale</th><th></th></tr></thead><tbody>'+
+  return '<div class="tw"><table><thead><tr><th>Data</th><th>Lavorazione</th><th>Totale</th><th>Stato</th><th></th></tr></thead><tbody>'+
     state.quotes.map(function(r){
-      return '<tr><td>'+dshort(r.date)+'</td><td>'+esc(r.q.name||'—')+'</td><td class="mono">'+eur(r.total)+'</td><td class="act"><button class="btn ghost sm" data-action="del" data-coll="quotes" data-id="'+r.id+'">Elimina</button></td></tr>';
+      return '<tr><td>'+dshort(r.date)+'</td><td>'+esc(r.q.name||'—')+'</td><td class="mono">'+eur(r.total)+'</td><td>'+pill(r.status)+'</td><td class="act"><button class="btn ghost sm" data-action="delq" data-id="'+r.id+'">Elimina</button></td></tr>';
     }).join('')+'</tbody></table></div>';
 }
 
@@ -584,19 +629,9 @@ function table(coll,cols,items,empty){
   COLS[coll]=cols;
   if(!items.length)return '<div class="empty">'+empty+'</div>';
   return '<div class="tw"><table><thead><tr>'+cols.map(function(c){return '<th>'+c.l+'</th>'}).join('')+'<th></th></tr></thead><tbody>'+
-    items.map(function(it){return '<tr>'+cols.map(function(c){return '<td>'+cell(coll,it,c)+'</td>'}).join('')+'<td class="act"><button class="btn ghost sm" type="button" data-action="del" data-coll="'+coll+'" data-id="'+it.id+'">Elimina</button></td></tr>'}).join('')+
-    '</tbody></table></div>';
+    items.map(function(it){return '<tr>'+cols.map(function(c){return '<td>'+cell(coll,it,c)+'</td>'}).join('')+'<td class="act"><button class="btn ghost sm" type="button" data-action="del" data-coll="'+coll+'" data-id="'+it.id+'">Elimina</button></td></tr>'}).join('')+'</tbody></table></div>';
 }
-function custOpts(){return [['','—']].concat(state.customers.map(function(c){return [c.id,c.name]}))}
-var NEW={
-  customers:function(){return {id:uid(),name:'Nuovo cliente',phone:'',email:'',note:''}},
-  printers:function(){return {id:uid(),name:'Nuova stampante',watts:150,price:500,years:4,hoursDay:8,repair:10,status:'libera'}},
-  spools:function(){return {id:uid(),material:'PLA',colorName:'',color:'#888888',brand:'',price:20,weight:1000,residual:1000}},
-  orders:function(){return {id:uid(),number:'AD-2026-001',customerId:'',name:'Nuova lavorazione',status:'nuovo',due:addDays(7),net:0,grams:0,hours:0,spoolId:'',deducted:false,booked:false}},
-  movements:function(){return {id:uid(),date:todayISO(),type:'entrata',label:'',amount:0}},
-  files:function(){return {id:uid(),name:'',kind:'STL',orderId:'',note:'',date:todayISO()}}
-};
-function addBtn(coll,label){return '<button class="btn pri" type="button" data-action="add" data-coll="'+coll+'">'+label+'</button>'}
+function addBtn(coll,label){return '<button class="btn pri" type="button" data-action="open-modal-add" data-coll="'+coll+'">'+label+'</button>'}
 function head(t,s,acts){return '<header class="ph"><div><h1>'+t+'</h1><p>'+s+'</p></div><div class="acts">'+(acts||'')+'</div></header>'}
 
 /* ---- viste ---- */
@@ -614,15 +649,15 @@ V.preventivi=function(){
 };
 V.ordini=function(){
   var cols=[{k:'number',l:'Numero',t:'text'},{k:'name',l:'Lavorazione',t:'text'},{k:'status',l:'Stato',t:'select',pill:1,o:function(){return ST.map(function(s){return [s,cap(s)]})}}];
-  return head('Ordini','Modifiche visibili da tutti.',addBtn('orders','Nuovo ordine'))+table('orders',cols,state.orders,'Nessun ordine.');
+  return head('Ordini','Gestione ordini.',addBtn('orders','Nuovo ordine'))+table('orders',cols,state.orders,'Nessun ordine.');
 };
 V.clienti=function(){
-  return head('Clienti','Anagrafica condivisa.',addBtn('customers','Nuovo cliente'))+table('clienti',[{k:'name',l:'Nome',t:'text'}],state.customers,'Nessun cliente.');
+  return head('Clienti','Anagrafica condivisa.',addBtn('customers','Nuovo cliente'))+table('clienti',[{k:'name',l:'Nome',t:'text'},{k:'phone',l:'Telefono',t:'text'},{k:'email',l:'Email',t:'text'}],state.customers,'Nessun cliente.');
 };
-V.produzione=function(){return head('Produzione','Stampanti',addBtn('printers','Nuova'))+table('printers',[{k:'name',l:'Nome',t:'text'}],state.printers,'Nessuna.')};
-V.magazzino=function(){return head('Magazzino','Bobine',addBtn('spools','Nuova'))+table('spools',[{k:'material',l:'Materiale',t:'text'}],state.spools,'Nessuna.')};
-V.contabilita=function(){return head('Contabilità','Movimenti',addBtn('movements','Nuovo'))+table('movements',[{k:'label',l:'Voce',t:'text'}],state.movements,'Nessun movimento.')};
-V.archivio=function(){return head('Archivio','File',addBtn('files','Nuovo'))+table('files',[{k:'name',l:'Nome',t:'text'}],state.files,'Nessun file.')};
+V.produzione=function(){return head('Produzione','Stampanti',addBtn('printers','Nuova stampante'))+table('printers',[{k:'name',l:'Nome',t:'text'}],state.printers,'Nessuna.')};
+V.magazzino=function(){return head('Magazzino','Bobine e filamenti',addBtn('spools','Nuova bobina'))+table('spools',[{k:'material',l:'Materiale',t:'text'},{k:'colorName',l:'Colore',t:'text'},{k:'residual',l:'Residuo g',t:'number'}],state.spools,'Nessuna bobina.')};
+V.contabilita=function(){return head('Contabilità','Entrate e uscite',addBtn('movements','Nuovo movimento'))+table('movements',[{k:'date',l:'Data',t:'date'},{k:'label',l:'Voce',t:'text'},{k:'amount',l:'Importo €',t:'number'}],state.movements,'Nessun movimento.')};
+V.archivio=function(){return head('Archivio','File',addBtn('files','Nuovo file'))+table('files',[{k:'name',l:'Nome',t:'text'}],state.files,'Nessun file.')};
 
 // Vista Impostazioni riservata all'admin
 V.impostazioni=function(){
@@ -641,7 +676,6 @@ function nav(){
 function render(){nav();$('#view').innerHTML=V[view]();if(AFTER[view])AFTER[view]()}
 function route(){
   var h=location.hash.slice(1);
-  // Protezione rotta: se non è admin e prova ad andare su impostazioni, bloccalo
   if(h === 'impostazioni' && userRole !== 'admin'){
     h = 'panoramica';
     location.hash = '#panoramica';
@@ -652,15 +686,114 @@ function route(){
 
 var ACTIONS={
   theme:function(){var th=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',th);localStorage.setItem(THEME_KEY,th)},
-  add:async function(b){var c=b.dataset.coll;var item=NEW[c]();state[c].unshift(item);await saveData(c,item);render()},
+  
+  'open-modal-add':function(b){
+    var c=b.dataset.coll;
+    if(c==='customers'){
+      openModal('Nuovo Cliente', `
+        <label class="fld"><span class="lbl">Nome e Cognome</span><input type="text" id="m-name" required></label>
+        <label class="fld"><span class="lbl">Telefono</span><input type="text" id="m-phone"></label>
+        <label class="fld"><span class="lbl">Email</span><input type="email" id="m-email"></label>
+        <label class="fld"><span class="lbl">Note</span><textarea id="m-note" style="min-height:60px"></textarea></label>
+      `, async function(){
+        var item={
+          id:uid(),
+          name:$('#m-name').value || 'Nuovo Cliente',
+          phone:$('#m-phone').value,
+          email:$('#m-email').value,
+          note:$('#m-note').value
+        };
+        state.customers.unshift(item);
+        await saveData('customers', item);
+        closeModal();
+        render();
+        toast('Cliente aggiunto');
+      });
+    } else if(c==='spools'){
+      openModal('Nuova Bobina / Magazzino', `
+        <label class="fld"><span class="lbl">Materiale</span>
+          <select id="m-mat"><option>PLA</option><option>PETG</option><option>ABS</option><option>TPU</option><option>ASA</option></select>
+        </label>
+        <label class="fld"><span class="lbl">Nome Colore</span><input type="text" id="m-colorname" placeholder="es. Nero Opaco"></label>
+        <label class="fld"><span class="lbl">Colore (Tinta)</span><input type="color" id="m-color" value="#1d1d1f"></label>
+        <label class="fld"><span class="lbl">Prezzo bobina (€)</span><input type="number" id="m-price" value="20" step="any"></label>
+        <label class="fld"><span class="lbl">Peso totale (g)</span><input type="number" id="m-weight" value="1000"></label>
+        <label class="fld"><span class="lbl">Quantità Bobine (moltiplica residuo)</span><input type="number" id="m-qty" value="1" min="1"></label>
+      `, async function(){
+        var qty = parseInt($('#m-qty').value) || 1;
+        var w = parseFloat($('#m-weight').value) || 1000;
+        for(let i=0; i<qty; i++){
+          var item={
+            id:uid(),
+            material:$('#m-mat').value,
+            colorName:$('#m-colorname').value,
+            color:$('#m-color').value,
+            brand:'Generico',
+            price:parseFloat($('#m-price').value) || 20,
+            weight:w,
+            residual:w
+          };
+          state.spools.unshift(item);
+          await saveData('spools', item);
+        }
+        closeModal();
+        render();
+        toast('Bobina/e aggiunta/e');
+      });
+    } else if(c==='movements'){
+      openModal('Nuovo Movimento Contabile', `
+        <label class="fld"><span class="lbl">Data</span><input type="date" id="m-date" value="'+todayISO()+'"></label>
+        <label class="fld"><span class="lbl">Tipo</span>
+          <select id="m-type"><option value="entrata">Entrata</option><option value="uscita">Uscita</option></select>
+        </label>
+        <label class="fld"><span class="lbl">Descrizione / Voce</span><input type="text" id="m-label" required></label>
+        <label class="fld"><span class="lbl">Importo (€)</span><input type="number" id="m-amount" step="any" required></label>
+      `, async function(){
+        var item={
+          id:uid(),
+          date:$('#m-date').value || todayISO(),
+          type:$('#m-type').value,
+          label:$('#m-label').value || 'Movimento',
+          amount:parseFloat($('#m-amount').value) || 0
+        };
+        state.movements.unshift(item);
+        await saveData('movements', item);
+        closeModal();
+        render();
+        toast('Movimento registrato');
+      });
+    } else {
+      // Default generico
+      var item=NEW[c]();
+      state[c].unshift(item);
+      await saveData(c,item);
+      render();
+    }
+  },
+
   newq:function(){q=newQuote(false);render();toast('Nuovo preventivo')},
   addx:function(){q.extras.push({label:'',amount:0});$('#extras').innerHTML=extrasHTML();updateSummary()},
   delx:function(b){q.extras.splice(+b.dataset.i,1);$('#extras').innerHTML=extrasHTML();updateSummary()},
-  mkorder:async function(){
-    var r=calc(q);var o={id:uid(),number:'AD-2026-999',name:q.name||'Lavorazione',status:'nuovo',due:addDays(7),net:r.net,grams:q.grams,hours:q.hours};
-    state.orders.unshift(o);await saveData('orders',o);toast('Ordine creato');location.hash='#ordini';
+  
+  saveq:async function(){
+    var rec = quoteRec('bozza');
+    state.quotes.unshift(rec);
+    await saveData('quotes', rec);
+    $('#qhist').innerHTML = histHTML();
+    toast('Preventivo salvato nello storico');
   },
-  del:async function(b){var c=b.dataset.coll,id=b.dataset.id;state[c]=state[c].filter(x=>x.id!==id);await deleteData(c,id);render()}
+
+  mkorder:async function(){
+    var r=calc(q);
+    var o={id:uid(),number:'AD-2026-'+Math.floor(100+Math.random()*900),name:q.name||'Lavorazione',status:'nuovo',due:addDays(7),net:r.net,grams:q.grams,hours:r.hrs};
+    state.orders.unshift(o);
+    await saveData('orders',o);
+    toast('Ordine creato con successo');
+    location.hash='#ordini';
+  },
+
+  del:async function(b){var c=b.dataset.coll,id=b.dataset.id;state[c]=state[c].filter(x=>x.id!==id);await deleteData(c,id);render()},
+  delq:async function(b){var id=b.dataset.id;state.quotes=state.quotes.filter(x=>x.id!==id);await deleteData('quotes',id);$('#qhist').innerHTML=histHTML();toast('Preventivo eliminato')}
 };
 
 document.addEventListener('click',function(e){var b=e.target.closest('[data-action]');if(b&&ACTIONS[b.dataset.action])ACTIONS[b.dataset.action](b)});
