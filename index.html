@@ -54,7 +54,8 @@ button,input,select,textarea{font:inherit;color:inherit}
 .auth-form{display:flex;flex-direction:column;gap:14px}
 .auth-toggle{margin-top:16px;text-align:center;font-size:13px;color:var(--muted)}
 .auth-toggle a{color:var(--accent);text-decoration:none;font-weight:500;cursor:pointer}
-.auth-error{color:var(--bad);font-size:13px;margin-top:4px;display:none}
+.auth-error{background:var(--bad-soft);color:var(--bad);padding:8px 12px;border-radius:7px;font-size:13px;display:none}
+.auth-success{background:var(--ok-soft);color:var(--ok);padding:8px 12px;border-radius:7px;font-size:13px;display:none}
 
 /* Modal Popup */
 .modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:100;opacity:0;pointer-events:none;transition:opacity .2s}
@@ -211,6 +212,7 @@ select.st{padding:5px 8px;min-width:118px}
       <label class="fld"><span class="lbl">Email</span><input type="email" id="auth-email" required placeholder="nome@email.it"></label>
       <label class="fld"><span class="lbl">Password</span><input type="password" id="auth-password" required placeholder="••••••••"></label>
       <div id="auth-error" class="auth-error"></div>
+      <div id="auth-success" class="auth-success"></div>
       <button class="btn pri w-full" type="submit" id="auth-submit">Accedi</button>
     </form>
     <div class="auth-toggle">
@@ -262,7 +264,6 @@ select.st{padding:5px 8px;min-width:118px}
 
 <script>
 /* ================= CONFIGURAZIONE SUPABASE ================= */
-// Inserisci qui l'URL pulito del tuo progetto Supabase (es. https://xxxxxx.supabase.co)
 const SUPABASE_URL = window.SUPABASE_URL || 'https://hnolrnviraoknrxncqdk.supabase.co';
 const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || 'sb_publishable_yLiy6rrZ4odJx7khvDgtdA_AR0vHS-r';
 
@@ -336,7 +337,7 @@ function calc(q){
   return {hrs:hrs,rows:rows,cost:cost,sub:sub,minApplied:minApplied,net:net,vat:vat,total:Math.round((net+vat)*100)/100};
 }
 
-/* ---------- Applicazione Cloud & Gestione Modali ---------- */
+/* ---------- Applicazione Cloud & Gestione Autenticazione Robusta ---------- */
 (function(){
 'use strict';
 var THEME_KEY='adlab3d-theme';
@@ -363,7 +364,7 @@ let isSignUp = false;
 let userRole = 'user';
 let activeModalCallback = null;
 
-/* Gestione Autenticazione UI & Fix Pulsante Registrati */
+/* Riferimenti UI Autenticazione */
 const authScreen = $('#auth-screen');
 const appContainer = $('#app-container');
 const authForm = $('#auth-form');
@@ -372,23 +373,37 @@ const authSubmit = $('#auth-submit');
 const authToggleBtn = $('#auth-toggle-btn');
 const authToggleText = $('#auth-toggle-text');
 const authError = $('#auth-error');
+const authSuccess = $('#auth-success');
 
+/* Toggle tra Accedi e Registrati */
 authToggleBtn.addEventListener('click', (e) => {
   e.preventDefault();
   isSignUp = !isSignUp;
   authError.style.display = 'none';
-  authTitle.textContent = isSignUp ? 'Crea un account' : 'Accedi al gestionale';
-  authSubmit.textContent = isSignUp ? 'Registrati' : 'Accedi';
-  authToggleText.textContent = isSignUp ? 'Hai già un account?' : 'Non hai un account?';
-  authToggleBtn.textContent = isSignUp ? 'Accedi' : 'Registrati';
+  authSuccess.style.display = 'none';
+  
+  if(isSignUp){
+    authTitle.textContent = 'Crea un account';
+    authSubmit.textContent = 'Registrati';
+    authToggleText.textContent = 'Hai già un account?';
+    authToggleBtn.textContent = 'Accedi';
+  } else {
+    authTitle.textContent = 'Accedi al gestionale';
+    authSubmit.textContent = 'Accedi';
+    authToggleText.textContent = 'Non hai un account?';
+    authToggleBtn.textContent = 'Registrati';
+  }
 });
 
+/* Invio Form Autenticazione (Login / Signup) */
 authForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   authError.style.display = 'none';
+  authSuccess.style.display = 'none';
   
   if(!supabaseClient){ 
-    alert('Configura prima le credenziali di Supabase nel codice!'); 
+    authError.textContent = 'Configura prima le credenziali di Supabase nel codice!';
+    authError.style.display = 'block';
     return; 
   }
   
@@ -402,7 +417,9 @@ authForm.addEventListener('submit', async (e) => {
     if(isSignUp){
       const { data, error } = await supabaseClient.auth.signUp({ email, password });
       if(error) throw error;
-      alert('Registrazione avvenuta con successo! Ora puoi effettuare il login.');
+      
+      authSuccess.textContent = 'Registrazione completata! Controlla la tua email o effettua l\'accesso.';
+      authSuccess.style.display = 'block';
       isSignUp = false;
       authTitle.textContent = 'Accedi al gestionale';
       authSubmit.textContent = 'Accedi';
