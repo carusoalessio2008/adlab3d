@@ -216,10 +216,9 @@ select.st{padding:5px 8px;min-width:118px}
       <div id="auth-success" class="auth-success"></div>
       
       <div class="auth-actions">
-        <!-- Pulsante principale di invio -->
+        <!-- Pulsante principale -->
         <button class="btn pri w-full" type="submit" id="auth-submit">Accedi</button>
-        
-        <!-- Pulsante separato ben visibile per passare da Login a Registrazione -->
+        <!-- Pulsante di toggle per passare da Accedi a Registrati -->
         <button class="btn ghost w-full sm" type="button" id="auth-toggle-btn">Non hai un account? Registrati</button>
       </div>
     </form>
@@ -369,7 +368,7 @@ let isSignUp = false;
 let userRole = 'user'; 
 let activeModalCallback = null;
 
-/* Gestione Autenticazione UI (Ora con pulsanti reali e visibili) */
+/* Gestione Autenticazione UI (Corretta senza errori di sintassi await) */
 const authScreen = $('#auth-screen');
 const appContainer = $('#app-container');
 const authForm = $('#auth-form');
@@ -379,11 +378,11 @@ const authToggleBtn = $('#auth-toggle-btn');
 const authError = $('#auth-error');
 const authSuccess = $('#auth-success');
 
-authToggleBtn.addEventListener('click', (e) => {
+authToggleBtn.addEventListener('click', function(e) {
   e.preventDefault();
   isSignUp = !isSignUp;
-  authError.style.display = 'none';
-  authSuccess.style.display = 'none';
+  if(authError) authError.style.display = 'none';
+  if(authSuccess) authSuccess.style.display = 'none';
   
   if(isSignUp){
     authTitle.textContent = 'Crea un account';
@@ -396,14 +395,16 @@ authToggleBtn.addEventListener('click', (e) => {
   }
 });
 
-authForm.addEventListener('submit', async (e) => {
+authForm.addEventListener('submit', function(e) {
   e.preventDefault();
-  authError.style.display = 'none';
-  authSuccess.style.display = 'none';
+  if(authError) authError.style.display = 'none';
+  if(authSuccess) authSuccess.style.display = 'none';
 
   if(!supabaseClient){ 
-    authError.textContent = 'Configura prima le credenziali di Supabase nel codice!';
-    authError.style.display = 'block';
+    if(authError){
+      authError.textContent = 'Configura prima le credenziali di Supabase nel codice!';
+      authError.style.display = 'block';
+    }
     return; 
   }
   
@@ -413,118 +414,151 @@ authForm.addEventListener('submit', async (e) => {
   authSubmit.disabled = true;
   authSubmit.textContent = isSignUp ? 'Registrazione in corso...' : 'Accesso in corso...';
 
-  try {
-    if(isSignUp){
-      const { data, error } = await supabaseClient.auth.signUp({ email, password });
-      if(error) throw error;
-      
-      authSuccess.textContent = 'Registrazione completata con successo! Ora puoi effettuare il login.';
-      authSuccess.style.display = 'block';
-      isSignUp = false;
-      authTitle.textContent = 'Accedi al gestionale';
-      authSubmit.textContent = 'Accedi';
-      authToggleBtn.textContent = 'Non hai un account? Registrati';
-      authForm.reset();
-    } else {
-      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-      if(error) throw error;
-      if(data.user) {
-        initApp(data.user);
-      }
-    }
-  } catch (err) {
-    authError.textContent = err.message || 'Errore durante l\'autenticazione.';
-    authError.style.display = 'block';
-  } finally {
-    authSubmit.disabled = false;
-    if(!isSignUp && authSubmit.textContent.includes('Accesso')) {
-      authSubmit.textContent = 'Accedi';
-    } else if(isSignUp && authSubmit.textContent.includes('Registrazione')) {
+  if(isSignUp){
+    supabaseClient.auth.signUp({ email, password }).then(function(res){
+      authSubmit.disabled = false;
       authSubmit.textContent = 'Registrati ora';
-    }
+      if(res.error){
+        if(authError){
+          authError.textContent = res.error.message;
+          authError.style.display = 'block';
+        }
+      } else {
+        if(authSuccess){
+          authSuccess.textContent = 'Registrazione completata! Controlla la tua email o effettua l\'accesso.';
+          authSuccess.style.display = 'block';
+        }
+        isSignUp = false;
+        authTitle.textContent = 'Accedi al gestionale';
+        authSubmit.textContent = 'Accedi';
+        authToggleBtn.textContent = 'Non hai un account? Registrati';
+        authForm.reset();
+      }
+    }).catch(function(err){
+      authSubmit.disabled = false;
+      authSubmit.textContent = 'Registrati ora';
+      if(authError){
+        authError.textContent = err.message || 'Errore di connessione.';
+        authError.style.display = 'block';
+      }
+    });
+  } else {
+    supabaseClient.auth.signInWithPassword({ email, password }).then(function(res){
+      authSubmit.disabled = false;
+      authSubmit.textContent = 'Accedi';
+      if(res.error){
+        if(authError){
+          authError.textContent = res.error.message;
+          authError.style.display = 'block';
+        }
+      } else if(res.data && res.data.user) {
+        initApp(res.data.user);
+      }
+    }).catch(function(err){
+      authSubmit.disabled = false;
+      authSubmit.textContent = 'Accedi';
+      if(authError){
+        authError.textContent = err.message || 'Errore di autenticazione.';
+        authError.style.display = 'block';
+      }
+    });
   }
 });
 
-$('#logoutbtn').addEventListener('click', async () => {
-  if(supabaseClient) await supabaseClient.auth.signOut();
-  location.reload();
+$('#logoutbtn').addEventListener('click', function() {
+  if(supabaseClient) {
+    supabaseClient.auth.signOut().then(function(){
+      location.reload();
+    });
+  } else {
+    location.reload();
+  }
 });
 
-async function checkUser(){
+function checkUser(){
   if(!supabaseClient){
     authScreen.style.display = 'none';
     appContainer.style.display = 'block';
     loadMockData();
+    route();
     return;
   }
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  if(session){
-    initApp(session.user);
-  } else {
-    authScreen.style.display = 'flex';
-    appContainer.style.display = 'none';
-  }
+  supabaseClient.auth.getSession().then(function(result){
+    var session = result.data.session;
+    if(session && session.user){
+      initApp(session.user);
+    } else {
+      authScreen.style.display = 'flex';
+      appContainer.style.display = 'none';
+    }
+  });
 }
 
-async function initApp(user){
+function initApp(user){
   authScreen.style.display = 'none';
   appContainer.style.display = 'block';
   $('#user-email-display').textContent = user.email;
 
   if(supabaseClient){
-    let { data } = await supabaseClient
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-    if(data) userRole = data.role;
+    supabaseClient.from('profiles').select('role').eq('id', user.id).single().then(function(res){
+      if(res.data) userRole = res.data.role;
+      if(userRole === 'admin'){
+        if(!VIEWS.some(function(v){return v[0]==='impostazioni'})){
+          VIEWS.push(['impostazioni', 'Impostazioni']);
+        }
+      }
+      loadCloudData().then(function(){
+        setupRealtime();
+        route();
+      });
+    }).catch(function(){
+      loadCloudData().then(function(){
+        setupRealtime();
+        route();
+      });
+    });
+  } else {
+    loadCloudData().then(function(){
+      route();
+    });
   }
-
-  if(userRole === 'admin'){
-    if(!VIEWS.some(function(v){return v[0]==='impostazioni'})){
-      VIEWS.push(['impostazioni', 'Impostazioni']);
-    }
-  }
-
-  await loadCloudData();
-  setupRealtime();
-  route();
 }
 
 /* Sincronizzazione Database Supabase */
-async function loadCloudData(){
-  if(!supabaseClient) return;
-  let { data: settingsData } = await supabaseClient.from('settings').select('*').single();
-  if(settingsData) state.settings = settingsData;
-
-  const tables = ['customers', 'printers', 'spools', 'orders', 'quotes', 'movements', 'files'];
-  for(let t of tables){
-    let { data } = await supabaseClient.from(t).select('*');
-    if(data) state[t] = data;
-  }
+function loadCloudData(){
+  if(!supabaseClient) return Promise.resolve();
+  return supabaseClient.from('settings').select('*').single().then(function(res){
+    if(res.data) state.settings = res.data;
+    var tables = ['customers', 'printers', 'spools', 'orders', 'quotes', 'movements', 'files'];
+    var promises = tables.map(function(t){
+      return supabaseClient.from(t).select('*').then(function(r){
+        if(r.data) state[t] = r.data;
+      });
+    });
+    return Promise.all(promises);
+  });
 }
 
 function setupRealtime(){
   if(!supabaseClient) return;
-  const tables = ['settings', 'customers', 'printers', 'spools', 'orders', 'quotes', 'movements', 'files'];
-  tables.forEach(t => {
+  var tables = ['settings', 'customers', 'printers', 'spools', 'orders', 'quotes', 'movements', 'files'];
+  tables.forEach(function(t){
     supabaseClient.channel('public:' + t)
-      .on('postgres_changes', { event: '*', schema: 'public', table: t }, async () => {
-        await loadCloudData();
-        render();
+      .on('postgres_changes', { event: '*', schema: 'public', table: t }, function(){
+        loadCloudData().then(function(){ render(); });
       })
       .subscribe();
   });
 }
 
-async function saveData(table, item){
-  if(!supabaseClient) return;
-  await supabaseClient.from(table).upsert(item);
+function saveData(table, item){
+  if(!supabaseClient) return Promise.resolve();
+  return supabaseClient.from(table).upsert(item);
 }
 
-async function deleteData(table, id){
-  if(!supabaseClient) return;
-  await supabaseClient.from(table).delete().eq('id', id);
+function deleteData(table, id){
+  if(!supabaseClient) return Promise.resolve();
+  return supabaseClient.from(table).delete().eq('id', id);
 }
 
 function loadMockData(){
@@ -753,7 +787,7 @@ var ACTIONS={
         <label class="fld"><span class="lbl">Telefono</span><input type="text" id="m-phone"></label>
         <label class="fld"><span class="lbl">Email</span><input type="email" id="m-email"></label>
         <label class="fld"><span class="lbl">Note</span><textarea id="m-note" style="min-height:60px"></textarea></label>
-      `, async function(){
+      `, function(){
         var item={
           id:uid(),
           name:$('#m-name').value || 'Nuovo Cliente',
@@ -762,10 +796,11 @@ var ACTIONS={
           note:$('#m-note').value
         };
         state.customers.unshift(item);
-        await saveData('customers', item);
-        closeModal();
-        render();
-        toast('Cliente aggiunto');
+        saveData('customers', item).then(function(){
+          closeModal();
+          render();
+          toast('Cliente aggiunto');
+        });
       });
     } else if(c==='spools'){
       openModal('Nuova Bobina / Magazzino', `
@@ -777,9 +812,10 @@ var ACTIONS={
         <label class="fld"><span class="lbl">Prezzo bobina (€)</span><input type="number" id="m-price" value="20" step="any"></label>
         <label class="fld"><span class="lbl">Peso totale (g)</span><input type="number" id="m-weight" value="1000"></label>
         <label class="fld"><span class="lbl">Quantità Bobine</span><input type="number" id="m-qty" value="1" min="1"></label>
-      `, async function(){
+      `, function(){
         var qty = parseInt($('#m-qty').value) || 1;
         var w = parseFloat($('#m-weight').value) || 1000;
+        var promises = [];
         for(let i=0; i<qty; i++){
           var item={
             id:uid(),
@@ -792,11 +828,13 @@ var ACTIONS={
             residual:w
           };
           state.spools.unshift(item);
-          await saveData('spools', item);
+          promises.push(saveData('spools', item));
         }
-        closeModal();
-        render();
-        toast('Bobina/e aggiunta/e');
+        Promise.all(promises).then(function(){
+          closeModal();
+          render();
+          toast('Bobina/e aggiunta/e');
+        });
       });
     } else if(c==='movements'){
       openModal('Nuovo Movimento Contabile', `
@@ -806,7 +844,7 @@ var ACTIONS={
         </label>
         <label class="fld"><span class="lbl">Descrizione / Voce</span><input type="text" id="m-label" required></label>
         <label class="fld"><span class="lbl">Importo (€)</span><input type="number" id="m-amount" step="any" required></label>
-      `, async function(){
+      `, function(){
         var item={
           id:uid(),
           date:$('#m-date').value || todayISO(),
@@ -815,49 +853,66 @@ var ACTIONS={
           amount:parseFloat($('#m-amount').value) || 0
         };
         state.movements.unshift(item);
-        await saveData('movements', item);
-        closeModal();
-        render();
-        toast('Movimento registrato');
+        saveData('movements', item).then(function(){
+          closeModal();
+          render();
+          toast('Movimento registrato');
+        });
       });
     } else {
       var item=NEW[c]();
       state[c].unshift(item);
-      await saveData(c,item);
-      render();
+      saveData(c,item).then(function(){ render(); });
     }
   },
 
-  add:async function(b){
+  add:function(b){
     var c=b.dataset.coll;
     var item=NEW[c]();
     state[c].unshift(item);
-    await saveData(c,item);
-    render();
+    saveData(c,item).then(function(){ render(); });
   },
 
   newq:function(){q=newQuote(false);render();toast('Nuovo preventivo')},
   addx:function(){q.extras.push({label:'',amount:0});$('#extras').innerHTML=extrasHTML();updateSummary()},
   delx:function(b){q.extras.splice(+b.dataset.i,1);$('#extras').innerHTML=extrasHTML();updateSummary()},
   
-  saveq:async function(){
+  saveq:function(){
     var rec = quoteRec('bozza');
     state.quotes.unshift(rec);
-    await saveData('quotes', rec);
-    $('#qhist').innerHTML = histHTML();
-    toast('Preventivo salvato nello storico');
+    saveData('quotes', rec).then(function(){
+      $('#qhist').innerHTML = histHTML();
+      toast('Preventivo salvato nello storico');
+    });
   },
 
-  mkorder:async function(){
-    var r=calc(q);var o={id:uid(),number:'AD-2026-999',name:q.name||'Lavorazione',status:'nuovo',due:addDays(7),net:r.net,grams:q.grams,hours:q.hours};
-    state.orders.unshift(o);await saveData('orders',o);toast('Ordine creato');location.hash='#ordini';
+  mkorder:function(){
+    var r=calc(q);
+    var o={id:uid(),number:'AD-2026-999',name:q.name||'Lavorazione',status:'nuovo',due:addDays(7),net:r.net,grams:q.grams,hours:q.hours};
+    state.orders.unshift(o);
+    saveData('orders', o).then(function(){
+      toast('Ordine creato');
+      location.hash='#ordini';
+    });
   },
 
-  del:async function(b){var c=b.dataset.coll,id=b.dataset.id;state[c]=state[c].filter(x=>x.id!==id);await deleteData(c,id);render()},
-  delq:async function(b){var id=b.dataset.id;state.quotes=state.quotes.filter(x=>x.id!==id);await deleteData('quotes',id);$('#qhist').innerHTML=histHTML();toast('Preventivo eliminato')}
+  del:function(b){
+    var c=b.dataset.coll, id=b.dataset.id;
+    state[c]=state[c].filter(function(x){return x.id!==id});
+    deleteData(c, id).then(function(){ render(); });
+  },
+
+  delq:function(b){
+    var id=b.dataset.id;
+    state.quotes=state.quotes.filter(function(x){return x.id!==id});
+    deleteData('quotes', id).then(function(){
+      $('#qhist').innerHTML = histHTML();
+      toast('Preventivo eliminato');
+    });
+  }
 };
 
-document.addEventListener('click',function(e){
+document.addEventListener('click', function(e){
   var b=e.target.closest('[data-action]');
   if(!b)return;
   var act = b.dataset.action;
@@ -865,29 +920,41 @@ document.addEventListener('click',function(e){
   else if(ACTIONS[act]){ ACTIONS[act](b); }
 });
 
-document.addEventListener('submit',function(e){e.preventDefault()});
+document.addEventListener('submit', function(e){e.preventDefault()});
 
-$('#view').addEventListener('input',function(e){
-  var t=e.target;if(t.dataset.qk!==undefined){q[t.dataset.qk]=t.type==='number'?num(t.value):t.value;updateSummary()}
+$('#view').addEventListener('input', function(e){
+  var t=e.target;
+  if(t.dataset.qk!==undefined){
+    q[t.dataset.qk]=t.type==='number'?num(t.value):t.value;
+    updateSummary();
+  }
 });
-$('#view').addEventListener('change',async function(e){
+
+$('#view').addEventListener('change', function(e){
   var t=e.target;
   if(t.dataset.st && userRole === 'admin'){
     state.settings[t.dataset.st]=num(t.value);
-    await saveData('settings', state.settings);
-    toast('Impostazione aggiornata');
+    saveData('settings', state.settings).then(function(){
+      toast('Impostazione aggiornata');
+    });
     return;
   }
   if(t.dataset.coll){
-    var coll=t.dataset.coll,it=state[coll].find(function(x){return x.id===t.dataset.id});if(!it)return;
+    var coll=t.dataset.coll, it=state[coll].find(function(x){return x.id===t.dataset.id});
+    if(!it)return;
     it[t.dataset.key]=t.dataset.t==='number'?num(t.value):t.value;
-    await saveData(coll,it);
-    if(t.dataset.pill)t.className='st '+stClass(t.value);
+    saveData(coll, it);
+    if(t.dataset.pill) t.className='st '+stClass(t.value);
   }
 });
-addEventListener('hashchange',route);
 
-try{var th=localStorage.getItem(THEME_KEY);if(th)document.documentElement.setAttribute('data-theme',th)}catch(e){}
+addEventListener('hashchange', route);
+
+try{
+  var th=localStorage.getItem(THEME_KEY);
+  if(th) document.documentElement.setAttribute('data-theme', th);
+}catch(e){}
+
 checkUser();
 })();
 </script>
