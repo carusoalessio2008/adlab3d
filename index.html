@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>AdLab3D Gestionale Cloud</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<!-- Supabase JS Client -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
@@ -24,102 +25,199 @@
   --cube-t:#eef0f5; --cube-l:#aab1bf; --cube-r:#7b8393;
   --seg-mat:#ff7a3d; --seg-en:#7ea5ff; --seg-lab:#56c88a; --seg-mach:#e8b04a; --seg-oth:#8a93a6;
   color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1117; --surface:#161a22; --surface2:#1f2430; --field:#11151c; --line:#2b3242;
+  --fg:#e7eaf1; --muted:#98a1b4; --accent:#ff7a3d; --accent-fg:#1a0e06; --accent-soft:#3b2314;
+  --ok:#56c88a; --ok-soft:#143023; --warn:#e8b04a; --warn-soft:#38290e; --bad:#ff8080; --bad-soft:#3b1c1c; --info:#7ea5ff; --info-soft:#1b2644;
+  --cube-t:#eef0f5; --cube-l:#aab1bf; --cube-r:#7b8393;
+  --seg-mat:#ff7a3d; --seg-en:#7ea5ff; --seg-lab:#56c88a; --seg-mach:#e8b04a; --seg-oth:#8a93a6;
+  color-scheme:dark}
+
 *{box-sizing:border-box}
-body{background:var(--bg);color:var(--fg);font:14.5px/1.5 var(--font-body);margin:0}
-h1,h2,h3{font-family:var(--font-display);font-weight:600;margin:0}
+body{background:var(--bg);color:var(--fg);font:14.5px/1.5 var(--font-body);-webkit-font-smoothing:antialiased;margin:0}
+h1,h2,h3{font-family:var(--font-display);font-weight:600;margin:0;text-wrap:balance}
 p{margin:0}
 button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mono,.r{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--font-mono);font-size:.93em}
+.r{text-align:right}
+.muted{color:var(--muted)}
+
+/* Auth Screen */
 #auth-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
 .auth-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:30px;width:100%;max-width:400px;box-shadow:0 4px 20px rgba(0,0,0,0.08)}
-.auth-brand{display:flex;align-items:center;gap:12px;margin-bottom:24px;color:var(--fg)}
-.auth-brand svg{width:40px;height:40px}
-.auth-brand b{font:700 20px/1 var(--font-display)}
+.auth-brand{display:flex;align-items:center;gap:12px;margin-bottom:24px;text-decoration:none;color:var(--fg)}
+.auth-brand svg{width:40px;height:40px;flex:none}
+.auth-brand b{display:block;font:700 20px/1 var(--font-display);letter-spacing:.02em}
+.auth-brand small{display:block;margin-top:4px;font-size:12px;color:var(--muted)}
 .auth-form{display:flex;flex-direction:column;gap:14px}
+.auth-toggle{margin-top:16px;text-align:center;font-size:13px;color:var(--muted)}
+.auth-toggle a{color:var(--accent);text-decoration:none;font-weight:500;cursor:pointer}
 
 /* Modal Popup */
 .modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:100;opacity:0;pointer-events:none;transition:opacity .2s}
 .modal-overlay.open{opacity:1;pointer-events:auto}
-.modal-box{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:24px;width:100%;max-width:450px;box-shadow:0 10px 30px rgba(0,0,0,0.15);display:flex;flex-direction:column;gap:16px}
+.modal-box{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:24px;width:100%;max-width:450px;box-shadow:0 10px 30px rgba(0,0,0,0.15);display:flex;flex-direction:column;gap:16px;transform:translateY(10px);transition:transform .2s}
+.modal-overlay.open .modal-box{transform:translateY(0)}
 .modal-h{display:flex;justify-content:space-between;align-items:center}
+.modal-h h3{font-size:18px}
 .modal-body{display:flex;flex-direction:column;gap:12px}
 .modal-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
 
-.shell{display:grid;grid-template-columns:232px minmax(0,1fr);gap:30px;max-width:1380px;margin:0 auto;padding:22px 16px}
-.side{position:sticky;top:22px;display:flex;flex-direction:column;gap:22px}
+/* shell */
+.shell{display:grid;grid-template-columns:232px minmax(0,1fr);gap:30px;max-width:1380px;margin:0 auto;
+  padding-block:22px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.side{position:sticky;top:22px;align-self:start;display:flex;flex-direction:column;gap:22px;min-width:0}
 .brand{display:flex;align-items:center;gap:11px;text-decoration:none;color:var(--fg)}
-.brand svg{width:40px;height:40px}
-.brand b{font:700 19px/1 var(--font-display)}
+.brand svg{width:40px;height:40px;flex:none}
+.brand b{display:block;font:700 19px/1 var(--font-display);letter-spacing:.02em}
+.brand small{display:block;margin-top:4px;font-size:11.5px;color:var(--muted)}
 .ct{fill:var(--cube-t)} .cl{fill:var(--cube-l)} .cr{fill:var(--cube-r)}
 .ax{stroke:var(--accent);stroke-width:2.2;stroke-linecap:round;fill:none}
 .nav{display:flex;flex-direction:column;gap:2px}
-.nav a{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:7px;color:var(--fg);text-decoration:none;font-weight:500;cursor:pointer}
+.nav a{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-radius:7px;color:var(--fg);text-decoration:none;font-weight:500;white-space:nowrap;cursor:pointer}
 .nav a:hover{background:var(--surface2)}
 .nav a.on{background:var(--fg);color:var(--bg)}
+.bdg{min-width:22px;padding:0 7px;border-radius:99px;font:500 12px/20px var(--font-mono);text-align:center;background:var(--surface2);color:var(--fg)}
+.nav a.on .bdg{background:var(--bg);color:var(--fg)}
+.bdg.warn{background:var(--warn-soft);color:var(--warn)}
+.side-foot{display:flex;flex-direction:column;gap:10px;align-items:flex-start;font-size:12px;color:var(--muted)}
+main{min-width:0}
+
+/* page head */
 .ph{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:20px}
-.ph h1{font-size:30px}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:38px;padding:0 15px;border-radius:7px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-weight:500}
+.ph h1{font-size:30px;line-height:1.1}
+.ph p{margin-top:6px;color:var(--muted);max-width:60ch}
+.acts{display:flex;gap:8px;flex-wrap:wrap}
+.h2{font-size:19px;margin:34px 0 12px}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:38px;padding:0 15px;border-radius:7px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-weight:500;white-space:nowrap}
 .btn:hover{background:var(--surface2)}
 .btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn.pri:hover{filter:brightness(1.06)}
 .btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}
+.btn.ghost:hover{background:var(--surface2);color:var(--fg)}
 .btn.sm{min-height:30px;padding:0 10px;font-size:13px}
 .btn.danger{background:var(--bad-soft);color:var(--bad);border-color:transparent}
 .w-full{width:100%}
+
+/* fields */
 .fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px}
-.fld{display:flex;flex-direction:column;gap:5px}
+.fld{display:flex;flex-direction:column;gap:5px;min-width:0}
 .fld.wide{grid-column:1/-1}
 .lbl{font-size:12.5px;font-weight:500;color:var(--muted)}
 input[type=text],input[type=number],input[type=date],input[type=email],input[type=password],select,textarea{width:100%;min-height:38px;padding:7px 10px;border:1px solid var(--line);border-radius:7px;background:var(--field)}
-input[type=color]{width:42px;height:34px;padding:2px;border:1px solid var(--line);border-radius:7px;cursor:pointer}
-textarea{min-height:80px;resize:vertical}
+input[type=color]{width:42px;height:34px;padding:2px;border:1px solid var(--line);border-radius:7px;background:var(--field);cursor:pointer}
+select{padding-right:6px}
+textarea{font:12px/1.45 var(--font-mono);min-height:120px;resize:vertical}
 .unit{display:flex;align-items:center;border:1px solid var(--line);border-radius:7px;background:var(--field);padding-right:10px}
+.unit:focus-within{outline:2px solid var(--accent);outline-offset:2px}
 .unit input{border:0;background:transparent;outline:0;min-width:0}
-.unit span{color:var(--muted);font-size:12.5px}
+.unit span{color:var(--muted);font-size:12.5px;white-space:nowrap}
+
+/* sections / cards */
 .qgrid{display:grid;grid-template-columns:minmax(0,1fr) 376px;gap:22px;align-items:start}
-.qform{display:flex;flex-direction:column;gap:14px}
-.sec{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
-.sec-h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:13px}
+.qform{display:flex;flex-direction:column;gap:14px;min-width:0}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px 18px}
+.sec-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:13px}
+.sec-h h3{font-size:16px}
+.subt{font:500 14px var(--font-mono);color:var(--muted)}
+.drop{display:flex;align-items:center;gap:12px;margin-top:14px;padding:12px 14px;border:1.5px dashed var(--line);border-radius:8px;cursor:pointer;background:var(--field)}
+.drop:hover{border-color:var(--accent)}
+.drop input{position:absolute;width:1px;height:1px;opacity:0}
+.drop:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.drop b{font-weight:600}
+.drop small{display:block;color:var(--muted)}
+.exrow{display:grid;grid-template-columns:minmax(0,1fr) 140px auto;gap:10px;margin-bottom:10px;align-items:center}
 .sum{position:sticky;top:22px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px}
-.big{font:700 44px/1.05 var(--font-display);margin:6px 0 4px}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.big{font:700 44px/1.05 var(--font-display);margin:6px 0 4px;font-variant-numeric:tabular-nums}
 .bar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--surface2);margin:16px 0 12px;gap:2px}
 .bar i{display:block;min-width:3px}
 .seg-mat{background:var(--seg-mat)} .seg-en{background:var(--seg-en)} .seg-lab{background:var(--seg-lab)} .seg-mach{background:var(--seg-mach)} .seg-oth{background:var(--seg-oth)}
+.brk{width:100%;border-collapse:collapse;font-size:13px}
+.brk th{font-size:11.5px;font-weight:600;color:var(--muted);text-align:right;padding:4px 0}
+.brk th:first-child{text-align:left}
+.brk td{padding:6px 0;border-top:1px solid var(--line);text-align:right}
+.brk td:first-child{text-align:left}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}
 .tot{display:grid;grid-template-columns:1fr auto;gap:5px 12px;margin-top:12px;font-size:13.5px}
 .tot dt{color:var(--muted)} .tot dd{margin:0;text-align:right}
+.tot .strong{font-weight:600;color:var(--fg)}
+.note{margin-top:10px;padding:8px 10px;border-radius:7px;background:var(--warn-soft);color:var(--warn);font-size:13px}
+.sum-acts{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+
+/* tables */
 .tw{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px}
 table{width:100%;border-collapse:collapse}
-th{padding:10px 12px;font-size:12px;font-weight:600;text-transform:uppercase;color:var(--muted);text-align:left;border-bottom:1px solid var(--line)}
-td{padding:8px 12px;border-top:1px solid var(--line)}
+th{padding:10px 12px;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);text-align:left;white-space:nowrap;border-bottom:1px solid var(--line)}
+td{padding:8px 12px;border-top:1px solid var(--line);vertical-align:middle}
+tbody tr:first-child td{border-top:0}
+td input,td select{min-width:92px}
+td.act{white-space:nowrap;text-align:right}
+.empty{padding:28px 18px;text-align:center;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:10px}
+.rbar{display:inline-block;vertical-align:middle;width:84px;height:8px;border-radius:4px;background:var(--surface2);overflow:hidden;margin-right:8px}
+.rbar i{display:block;height:100%;background:var(--ok)}
+.rbar.low i{background:var(--warn)}
+
+/* pills + status selects */
+.pill,select.st{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12.5px;font-weight:600;border:0;min-height:0;width:auto}
+select.st{padding:5px 8px;min-width:118px}
+.st-nuovo{background:var(--info-soft);color:var(--info)}
+.st-da-avviare,.st-bozza{background:var(--surface2);color:var(--muted)}
+.st-in-stampa{background:var(--accent-soft);color:var(--accent)}
+.st-pronto,.st-ordine{background:var(--ok-soft);color:var(--ok)}
+.st-consegnato{background:var(--surface2);color:var(--fg)}
+.p-warn{background:var(--warn-soft);color:var(--warn)} .p-bad{background:var(--bad-soft);color:var(--bad)}
+
+/* dashboard */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:18px}
 .kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
-.kpi b{display:block;font:700 32px var(--font-display);margin-top:4px}
-#toast{position:fixed;left:50%;bottom:20px;transform:translate(-50%,14px);opacity:0;pointer-events:none;background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:500;transition:opacity .18s,transform .18s;z-index:200}
+.kpi b{display:block;font:700 32px/1.1 var(--font-display);margin-top:4px;font-variant-numeric:tabular-nums}
+.kpi small{color:var(--muted)}
+.two{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:18px;align-items:start}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;min-width:0}
+.card h3{font-size:16px;margin-bottom:10px}
+.al{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+.al:first-of-type{border-top:0}
+.al small{display:block;color:var(--muted)}
+.banner{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;padding:11px 14px;border-radius:9px;background:var(--info-soft);color:var(--info)}
+.banner span{color:var(--fg)}
+.intro{margin:-6px 0 14px;color:var(--muted);max-width:70ch}
+
+#toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translate(-50%,14px);opacity:0;pointer-events:none;
+  background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:500;max-width:calc(100vw - 32px);transition:opacity .18s,transform .18s;z-index:20}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 </style>
 </head>
 <body>
 
-<!-- SCHERMATA DI ACCESSO -->
+<!-- SCHERMATA DI AUTENTICAZIONE -->
 <div id="auth-screen">
   <div class="auth-card">
     <div class="auth-brand">
-      <svg viewBox="0 0 48 48">
+      <svg viewBox="0 0 48 48" aria-hidden="true">
         <polygon class="ct" points="24,5 40,14 24,23 8,14"/>
         <polygon class="cl" points="8,14 24,23 24,43 8,34"/>
         <polygon class="cr" points="24,23 40,14 40,34 24,43"/>
         <path class="ax" d="M24 43 V23 M24 43 L8 34 M24 43 L40 34"/>
       </svg>
-      <div><b>ADLAB3D</b><small>Accedi al gestionale</small></div>
+      <div><b>ADLAB3D</b><small id="auth-title">Accedi al gestionale</small></div>
     </div>
-    <div class="auth-form">
-      <label class="fld"><span class="lbl">Email</span><input type="email" id="auth-email" value="admin@adlab3d.it"></label>
-      <label class="fld"><span class="lbl">Password</span><input type="password" id="auth-password" value="123456"></label>
-      <!-- Pulsante diretto con ID dedicato per evitare qualsiasi blocco -->
-      <button class="btn pri w-full" type="button" id="btn-entra">Accedi / Entra Subito</button>
+    <form id="auth-form" class="auth-form">
+      <label class="fld"><span class="lbl">Email</span><input type="email" id="auth-email" required placeholder="nome@email.it"></label>
+      <label class="fld"><span class="lbl">Password</span><input type="password" id="auth-password" required placeholder="••••••••"></label>
+      <button class="btn pri w-full" type="submit" id="auth-submit">Accedi</button>
+    </form>
+    <div class="auth-toggle">
+      <span id="auth-toggle-text">Non hai un account?</span> <a id="auth-toggle-btn">Registrati</a>
     </div>
   </div>
 </div>
 
-<!-- MODALE POPUP -->
+<!-- MODALE POPUP GENERICO -->
 <div class="modal-overlay" id="modal-overlay">
   <div class="modal-box" id="modal-box">
     <div class="modal-h">
@@ -134,69 +232,255 @@ td{padding:8px 12px;border-top:1px solid var(--line)}
   </div>
 </div>
 
-<!-- APP PRINCIPALE -->
+<!-- APPLICAZIONE PRINCIPALE (nascosta finché non si effettua il login) -->
 <div id="app-container" style="display:none;">
   <div class="shell">
     <aside class="side">
-      <a class="brand" href="#panoramica">
-        <svg viewBox="0 0 48 48">
+      <a class="brand" href="#panoramica" aria-label="AdLab3D, panoramica">
+        <svg viewBox="0 0 48 48" aria-hidden="true">
           <polygon class="ct" points="24,5 40,14 24,23 8,14"/>
           <polygon class="cl" points="8,14 24,23 24,43 8,34"/>
           <polygon class="cr" points="24,23 40,14 40,34 24,43"/>
           <path class="ax" d="M24 43 V23 M24 43 L8 34 M24 43 L40 34"/>
         </svg>
-        <span><b>ADLAB3D</b><small id="user-email-display">Gestionale Cloud</small></span>
+        <span><b>ADLAB3D</b><small id="user-email-display">Cloud Sync</small></span>
       </a>
-      <nav class="nav" id="nav"></nav>
+      <nav class="nav" id="nav" aria-label="Sezioni"></nav>
       <div class="side-foot">
-        <button class="btn sm danger" id="logoutbtn" type="button">Esci</button>
+        <button class="btn sm" id="themebtn" data-action="theme" type="button">Tema scuro</button>
+        <button class="btn sm danger" id="logoutbtn" data-action="logout" type="button">Esci dall'account</button>
+        <p>Sincronizzato in tempo reale.</p>
       </div>
     </aside>
     <main id="view"></main>
   </div>
 </div>
 
-<div id="toast" role="status"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <script>
+/* ================= CONFIGURAZIONE SUPABASE ================= */
+const SUPABASE_URL = window.SUPABASE_URL || 'https://hnolrnviraoknrxncqdk.supabase.co';
+const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || 'sb_publishable_yLiy6rrZ4odJx7khvDgtdA_AR0vHS-r';
+
+let supabaseClient = null;
+if(window.supabase && SUPABASE_URL !== 'IL_TUO_SUPABASE_URL'){
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+}
+
+/* ---------- Motore di calcolo e lettura G-code ---------- */
 function num(v){var n=parseFloat(v);return isFinite(n)?n:0}
-function eur(n){return new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(n||0)}
-function nf(n,d){d=d==null?1:d;return new Intl.NumberFormat('it-IT',{minimumFractionDigits:d,maximumFractionDigits:d}).format(n||0)}
-function iso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
-function todayISO(){return iso(new Date())}
-function addDays(n){var d=new Date();d.setDate(d.getDate()+n);return iso(d)}
+
+function parseDur(s){
+  if(!s) return null;
+  var sec=0, found=false;
+  var parts=[[/(\d+(?:\.\d+)?)\s*d/i,86400],[/(\d+(?:\.\d+)?)\s*h/i,3600],[/(\d+(?:\.\d+)?)\s*m(?!s)/i,60],[/(\d+(?:\.\d+)?)\s*s/i,1]];
+  for(var i=0;i<parts.length;i++){
+    var m=s.match(parts[i][0]);
+    if(m){sec+=parseFloat(m[1])*parts[i][1];found=true}
+  }
+  return found?sec:null;
+}
+
+function parseGcode(txt){
+  var res={minutes:null,grams:null};
+  var tre=[
+    /;\s*estimated printing time \(normal mode\)\s*[=:]\s*([^\r\n;]+)/i,
+    /;\s*total estimated time\s*[=:]\s*([^\r\n;]+)/i,
+    /;\s*model printing time\s*[=:]\s*([^\r\n;]+)/i
+  ];
+  for(var i=0;i<tre.length;i++){
+    var m=txt.match(tre[i]);
+    if(m){var s=parseDur(m[1]);if(s!==null){res.minutes=Math.max(1,Math.round(s/60));break}}
+  }
+  var wre=[
+    /;\s*total filament weight \[g\]\s*[=:]\s*([ \d.,]+)/i,
+    /;\s*total filament used \[g\]\s*[=:]\s*([ \d.,]+)/i,
+    /;\s*filament used \[g\]\s*[=:]\s*([ \d.,]+)/i
+  ];
+  for(var j=0;j<wre.length;j++){
+    var w=txt.match(wre[j]);
+    if(w){
+      var g=w[1].split(',').map(function(x){return parseFloat(x)}).filter(function(x){return isFinite(x)}).reduce(function(a,b){return a+b},0);
+      if(g>0){res.grams=Math.round(g*100)/100;break}
+    }
+  }
+  return res;
+}
+
+function machHour(p){
+  var y=num(p.years),h=num(p.hoursDay);
+  if(y<=0||h<=0) return 0;
+  return num(p.price)/(y*365*h)*(1+num(p.repair)/100);
+}
+
+function calc(q){
+  var hrs=num(q.hours)+num(q.minutes)/60;
+  var mat=num(q.spoolWeight)>0?num(q.grams)/num(q.spoolWeight)*num(q.spoolPrice):0;
+  var en=num(q.watts)/1000*hrs*num(q.energy);
+  var lab=num(q.prepMin)/60*num(q.prepRate)+num(q.postMin)/60*num(q.postRate);
+  var mach=hrs*machHour({price:q.machPrice,years:q.years,hoursDay:q.hoursDay,repair:q.repair});
+  var oth=(q.extras||[]).reduce(function(a,x){return a+num(x.amount)},0);
+  var def=[['mat','Filamento',mat,q.markMat],['en','Elettricità',en,q.markEn],['lab','Manodopera',lab,q.markLab],['mach','Macchina e manutenzione',mach,q.markMach],['oth','Altri costi',oth,q.markOther]];
+  var rows=def.map(function(d){var m=num(d[3]);return {id:d[0],label:d[1],cost:d[2],mark:m,price:d[2]*(1+m/100)}});
+  var cost=rows.reduce(function(a,r){return a+r.cost},0);
+  var sub=rows.reduce(function(a,r){return a+r.price},0);
+  var min=num(q.minPrice);
+  var minApplied=sub<min;
+  var net=Math.round(Math.max(sub,min)*100)/100;
+  var vat=Math.round(net*num(q.vat))/100;
+  vat=Math.round(vat*100)/100;
+  return {hrs:hrs,rows:rows,cost:cost,sub:sub,minApplied:minApplied,net:net,vat:vat,total:Math.round((net+vat)*100)/100};
+}
+
+/* ---------- Applicazione Cloud & Gestione Ruoli & Modali ---------- */
+(function(){
+'use strict';
+var THEME_KEY='adlab3d-theme';
 function $(s,r){return (r||document).querySelector(s)}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function uid(){return Math.random().toString(36).slice(2,9)}
+function pad(n){return String(n).padStart(2,'0')}
+function iso(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
+function todayISO(){return iso(new Date())}
+function addDays(n){var d=new Date();d.setDate(d.getDate()+n);return iso(d)}
+function nf(n,d){d=d==null?1:d;return new Intl.NumberFormat('it-IT',{minimumFractionDigits:d,maximumFractionDigits:d}).format(n||0)}
+function eur(n){return new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(n||0)}
+function dshort(s){if(!s)return '—';var d=new Date(s+'T00:00');return isNaN(d)?'—':d.toLocaleDateString('it-IT',{day:'numeric',month:'short'})}
+function clone(o){return JSON.parse(JSON.stringify(o))}
+function cap(s){return s.charAt(0).toUpperCase()+s.slice(1)}
 
 let state = {
   settings:{energy:0.30,prepMin:5,prepRate:15,postMin:5,postRate:15,markMat:30,markEn:0,markLab:0,markMach:20,markOther:0,minPrice:3,vat:22},
-  customers:[{id:uid(), name:'Mario Rossi', phone:'3331234567', email:'mario@rossi.it', note:'Cliente abituale'}],
-  printers:[{id:uid(), name:'Bambu Lab X1C', watts:250, price:1200, years:3, hoursDay:10, repair:10}],
-  spools:[{id:uid(), material:'PLA', colorName:'Nero', color:'#111', price:22, weight:1000, residual:850}],
-  orders:[{id:uid(), number:'AD-2026-001', name:'Supporto Monitor', status:'nuovo', due:addDays(5), net:45, grams:120, hours:3}],
-  quotes:[],
-  movements:[{id:uid(), date:todayISO(), type:'entrata', label:'Vendita filamento', amount:35}],
-  files:[]
+  customers:[], printers:[], spools:[], orders:[], quotes:[], movements:[], files:[]
 };
-
-var q = null;
-var view = 'panoramica';
+var q=null;
+var view='panoramica';
+let isSignUp = false;
+let userRole = 'user'; 
 let activeModalCallback = null;
 
-// GESTIONE DIRETTA DEL CLICK SUL PULSANTE DI ACCESSO
-document.getElementById('btn-entra').addEventListener('click', function(e) {
-  e.preventDefault();
-  $('#auth-screen').style.display = 'none';
-  $('#app-container').style.display = 'block';
-  route();
+/* Gestione Autenticazione UI */
+const authScreen = $('#auth-screen');
+const appContainer = $('#app-container');
+const authForm = $('#auth-form');
+const authTitle = $('#auth-title');
+const authSubmit = $('#auth-submit');
+const authToggleBtn = $('#auth-toggle-btn');
+const authToggleText = $('#auth-toggle-text');
+
+authToggleBtn.addEventListener('click', () => {
+  isSignUp = !isSignUp;
+  authTitle.textContent = isSignUp ? 'Crea un account' : 'Accedi al gestionale';
+  authSubmit.textContent = isSignUp ? 'Registrati' : 'Accedi';
+  authToggleText.textContent = isSignUp ? 'Hai già un account?' : 'Non hai un account?';
+  authToggleBtn.textContent = isSignUp ? 'Accedi' : 'Registrati';
 });
 
-$('#logoutbtn').addEventListener('click', function(){
+authForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if(!supabaseClient){ alert('Configura prima le credenziali di Supabase nel codice!'); return; }
+  const email = $('#auth-email').value;
+  const password = $('#auth-password').value;
+  
+  if(isSignUp){
+    const { data, error } = await supabaseClient.auth.signUp({ email, password });
+    if(error) alert(error.message);
+    else { alert('Registrazione avvenuta! Controlla la tua email o accedi.'); isSignUp = false; authForm.reset(); }
+  } else {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if(error) alert(error.message);
+    else { initApp(data.user); }
+  }
+});
+
+$('#logoutbtn').addEventListener('click', async () => {
+  if(supabaseClient) await supabaseClient.auth.signOut();
   location.reload();
 });
 
-// Modali Popup
+async function checkUser(){
+  if(!supabaseClient){
+    authScreen.style.display = 'none';
+    appContainer.style.display = 'block';
+    loadMockData();
+    return;
+  }
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if(session){
+    initApp(session.user);
+  } else {
+    authScreen.style.display = 'flex';
+    appContainer.style.display = 'none';
+  }
+}
+
+async function initApp(user){
+  authScreen.style.display = 'none';
+  appContainer.style.display = 'block';
+  $('#user-email-display').textContent = user.email;
+
+  if(supabaseClient){
+    let { data } = await supabaseClient
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+    if(data) userRole = data.role;
+  }
+
+  if(userRole === 'admin'){
+    if(!VIEWS.some(function(v){return v[0]==='impostazioni'})){
+      VIEWS.push(['impostazioni', 'Impostazioni']);
+    }
+  }
+
+  await loadCloudData();
+  setupRealtime();
+  route();
+}
+
+/* Sincronizzazione Database Supabase */
+async function loadCloudData(){
+  if(!supabaseClient) return;
+  let { data: settingsData } = await supabaseClient.from('settings').select('*').single();
+  if(settingsData) state.settings = settingsData;
+
+  const tables = ['customers', 'printers', 'spools', 'orders', 'quotes', 'movements', 'files'];
+  for(let t of tables){
+    let { data } = await supabaseClient.from(t).select('*');
+    if(data) state[t] = data;
+  }
+}
+
+function setupRealtime(){
+  if(!supabaseClient) return;
+  const tables = ['settings', 'customers', 'printers', 'spools', 'orders', 'quotes', 'movements', 'files'];
+  tables.forEach(t => {
+    supabaseClient.channel('public:' + t)
+      .on('postgres_changes', { event: '*', schema: 'public', table: t }, async () => {
+        await loadCloudData();
+        render();
+      })
+      .subscribe();
+  });
+}
+
+async function saveData(table, item){
+  if(!supabaseClient) return;
+  await supabaseClient.from(table).upsert(item);
+}
+
+async function deleteData(table, id){
+  if(!supabaseClient) return;
+  await supabaseClient.from(table).delete().eq('id', id);
+}
+
+function loadMockData(){
+  state.customers = [{id:uid(), name:'Cliente Esempio', phone:'', email:'', note:''}];
+}
+
+/* ---- Gestione Modali (Pop-up) ---- */
 function openModal(title, htmlContent, onSave){
   $('#modal-title').textContent = title;
   $('#modal-body').innerHTML = htmlContent;
@@ -213,15 +497,26 @@ $('#modal-save').addEventListener('click', function(){
   if(activeModalCallback) activeModalCallback();
 });
 
+/* ---- utilità ---- */
+function cname(id){var c=state.customers.find(function(x){return x.id===id});return c?c.name:'—'}
+function spoolLabel(s){return (s.material+' '+(s.colorName||'')).trim()}
+function lowSpool(s){return s.weight>0&&s.residual/s.weight<0.2}
+var ST=['nuovo','da avviare','in stampa','pronto','consegnato'];
+function stClass(s){return 'st-'+String(s).replace(/ /g,'-')}
+function pill(s){return '<span class="pill '+stClass(s)+'">'+esc(cap(s))+'</span>'}
 var tt;
-function toast(m){var t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(function(){t.classList.remove('on')},2500)}
+function toast(m){var t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(function(){t.classList.remove('on')},2800)}
+function copyText(txt){
+  if(navigator.clipboard&&navigator.clipboard.writeText) return navigator.clipboard.writeText(txt);
+  return Promise.resolve(false);
+}
 
-// Preventivo
-function newQuote(){
+/* ---- preventivo ---- */
+function newQuote(sample){
   var s=state.settings,p=state.printers[0],sp=state.spools[0];
   return {
-    name:'',customerId:state.customers[0]?state.customers[0].id:'',
-    hours:2,minutes:30,grams:50,
+    name:sample?'Supporto PLA (esempio)':'',customerId:sample&&state.customers[0]?state.customers[0].id:'',
+    hours:sample?2:0,minutes:sample?30:0,grams:sample?48:0,
     spoolId:sp?sp.id:'',spoolPrice:sp?sp.price:20,spoolWeight:sp?sp.weight:1000,markMat:s.markMat,
     printerId:p?p.id:'',watts:p?p.watts:150,energy:s.energy,markEn:s.markEn,
     prepMin:s.prepMin,prepRate:s.prepRate,postMin:s.postMin,postRate:s.postRate,markLab:s.markLab,
@@ -229,108 +524,321 @@ function newQuote(){
     extras:[],markOther:s.markOther,minPrice:s.minPrice,vat:s.vat
   };
 }
-
-function calc(q){
-  var hrs=num(q.hours)+num(q.minutes)/60;
-  var mat=num(q.spoolWeight)>0?num(q.grams)/num(q.spoolWeight)*num(q.spoolPrice):0;
-  var en=num(q.watts)/1000*hrs*num(q.energy);
-  var lab=num(q.prepMin)/60*num(q.prepRate)+num(q.postMin)/60*num(q.postRate);
-  var mach=hrs*(num(q.machPrice)/(num(q.years)*365*num(q.hoursDay))*(1+num(q.repair)/100));
-  var oth=(q.extras||[]).reduce(function(a,x){return a+num(x.amount)},0);
-  var def=[['mat','Filamento',mat,q.markMat],['en','Elettricità',en,q.markEn],['lab','Manodopera',lab,q.markLab],['mach','Macchina',mach,q.markMach],['oth','Altri',oth,q.markOther]];
-  var rows=def.map(function(d){var m=num(d[3]);return {id:d[0],label:d[1],cost:d[2],mark:m,price:d[2]*(1+m/100)}});
-  var cost=rows.reduce(function(a,r){return a+r.cost},0);
-  var sub=rows.reduce(function(a,r){return a+r.price},0);
-  var net=Math.round(Math.max(sub,num(q.minPrice))*100)/100;
-  var vat=Math.round(net*num(q.vat))/100;
-  return {hrs:hrs,rows:rows,cost:cost,sub:sub,net:net,vat:vat,total:Math.round((net+vat)*100)/100};
-}
-
 var QS=[
-  {id:'info',t:'Informazioni',f:[
+  {id:'info',t:'Informazioni stampa',gcode:1,f:[
     {k:'name',l:'Nome lavorazione',t:'text',wide:1},
     {k:'customerId',l:'Cliente',t:'select',o:function(){return [['','Nessun cliente']].concat(state.customers.map(function(c){return [c.id,c.name]}))}},
-    {k:'hours',l:'Ore',t:'number'},{k:'minutes',l:'Minuti',t:'number'},{k:'grams',l:'Grammi',t:'number'}]},
-  {id:'mat',t:'Materiale',f:[
-    {k:'spoolPrice',l:'Prezzo bobina €',t:'number'},{k:'spoolWeight',l:'Peso bobina g',t:'number'},{k:'markMat',l:'Ricarico %',t:'number'}]},
-  {id:'fin',t:'IVA e Minimo',nosub:1,f:[
-    {k:'minPrice',l:'Prezzo minimo €',t:'number'},{k:'vat',l:'IVA %',t:'number'}]}
+    {k:'printerId',l:'Stampante',t:'select',o:function(){return [['','Valori manuali']].concat(state.printers.map(function(p){return [p.id,p.name]}))}},
+    {k:'hours',l:'Tempo di stampa',u:'ore',t:'number'},
+    {k:'minutes',l:'Minuti',u:'min',t:'number'},
+    {k:'grams',l:'Peso del filamento',u:'g',t:'number'}]},
+  {id:'mat',t:'Filamento',f:[
+    {k:'spoolId',l:'Bobina',t:'select',o:function(){return [['','Valori manuali']].concat(state.spools.map(function(s){return [s.id,spoolLabel(s)+' · '+nf(s.residual,0)+' g residui']}))}},
+    {k:'spoolPrice',l:'Prezzo della bobina',u:'€',t:'number'},
+    {k:'spoolWeight',l:'Peso della bobina',u:'g',t:'number'},
+    {k:'markMat',l:'Ricarico',u:'%',t:'number'}]},
+  {id:'en',t:'Elettricità',f:[
+    {k:'watts',l:'Consumo medio',u:'W',t:'number'},
+    {k:'energy',l:'Costo energia',u:'€/kWh',t:'number'},
+    {k:'markEn',l:'Ricarico',u:'%',t:'number'}]},
+  {id:'lab',t:'Manodopera',f:[
+    {k:'prepMin',l:'Preparazione',u:'min',t:'number'},
+    {k:'prepRate',l:'Tariffa preparazione',u:'€/h',t:'number'},
+    {k:'postMin',l:'Post-processing',u:'min',t:'number'},
+    {k:'postRate',l:'Tariffa post-processing',u:'€/h',t:'number'},
+    {k:'markLab',l:'Ricarico',u:'%',t:'number'}]},
+  {id:'mach',t:'Macchina e manutenzione',f:[
+    {k:'machPrice',l:'Prezzo di acquisto',u:'€',t:'number'},
+    {k:'years',l:'Ammortamento',u:'anni',t:'number'},
+    {k:'hoursDay',l:'Utilizzo giornaliero',u:'h/giorno',t:'number'},
+    {k:'repair',l:'Costi di riparazione',u:'%',t:'number'},
+    {k:'markMach',l:'Ricarico',u:'%',t:'number'}]},
+  {id:'oth',t:'Altri costi',extras:1,f:[{k:'markOther',l:'Ricarico',u:'%',t:'number'}]},
+  {id:'fin',t:'Prezzo minimo e IVA',nosub:1,f:[
+    {k:'minPrice',l:'Prezzo minimo (imponibile)',u:'€',t:'number'},
+    {k:'vat',l:'IVA',u:'%',t:'number'}]}
 ];
-
 function fieldHTML(f){
-  var v=q[f.k];
+  var v=q[f.k],ctl;
   if(f.t==='select'){
-    return '<label class="fld"><span class="lbl">'+f.l+'</span><select id="q_'+f.k+'" data-qk="'+f.k+'">'+f.o().map(o=>'<option value="'+esc(o[0])+'"'+(o[0]===v?' selected':'')+'>'+esc(o[1])+'</option>').join('')+'</select></label>';
+    ctl='<select id="q_'+f.k+'" data-qk="'+f.k+'">'+f.o().map(function(o){return '<option value="'+esc(o[0])+'"'+(o[0]===v?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select>';
+  }else if(f.t==='number'){
+    ctl='<div class="unit"><input id="q_'+f.k+'" data-qk="'+f.k+'" type="number" step="any" min="0" inputmode="decimal" value="'+esc(v)+'">'+(f.u?'<span>'+f.u+'</span>':'')+'</div>';
+  }else{
+    ctl='<input id="q_'+f.k+'" data-qk="'+f.k+'" type="text" value="'+esc(v)+'">';
   }
-  return '<label class="fld"><span class="lbl">'+f.l+'</span><input id="q_'+f.k+'" data-qk="'+f.k+'" type="'+f.t+'" value="'+esc(v)+'"></label>';
+  return '<label class="fld'+(f.wide?' wide':'')+'"><span class="lbl">'+f.l+'</span>'+ctl+'</label>';
 }
-
+function extrasHTML(){
+  var rows=q.extras.map(function(x,i){
+    return '<div class="exrow"><input type="text" aria-label="Descrizione costo" placeholder="Descrizione" data-ex="'+i+'" data-f="label" value="'+esc(x.label)+'">'+
+      '<div class="unit"><input type="number" step="any" min="0" inputmode="decimal" aria-label="Importo" data-ex="'+i+'" data-f="amount" value="'+esc(x.amount)+'"><span>€</span></div>'+
+      '<button class="btn ghost sm" type="button" data-action="delx" data-i="'+i+'">Rimuovi</button></div>';
+  }).join('');
+  return rows+'<div class="acts" style="margin-bottom:14px"><button class="btn sm" type="button" data-action="addx">Aggiungi costo</button></div>';
+}
 function sectionsHTML(){
-  return QS.map(s=>'<section class="sec"><div class="sec-h"><h3>'+s.t+'</h3></div><div class="fgrid">'+s.f.map(fieldHTML).join('')+'</div></section>').join('');
+  return QS.map(function(s){
+    return '<section class="sec"><div class="sec-h"><h3>'+s.t+'</h3>'+(s.nosub?'':'<span class="subt" data-sub="'+s.id+'"></span>')+'</div>'+
+      (s.extras?'<div id="extras">'+extrasHTML()+'</div>':'')+
+      '<div class="fgrid">'+s.f.map(fieldHTML).join('')+'</div>'+
+      (s.gcode?'<label class="drop" for="gcode"><input id="gcode" type="file" accept=".gcode,.gco,.nc,.txt"><span><b>Carica il G-code</b><small id="gmsg">Legge tempo e peso.</small></span></label>':'')+
+      '</section>';
+  }).join('');
 }
-
+function setVal(k){var el=$('#q_'+k);if(el)el.value=q[k]}
 function updateSummary(){
   var el=$('#summary');if(!el||!q)return;
   var r=calc(q);
-  el.innerHTML='<p class="eyebrow">Totale</p><div class="big">'+eur(r.total)+'</div><dl class="tot"><dt>Imponibile</dt><dd>'+eur(r.net)+'</dd><dt>IVA</dt><dd>'+eur(r.vat)+'</dd></dl><div style="margin-top:14px;display:flex;flex-direction:column;gap:8px;"><button class="btn" type="button" data-action="saveq">Salva in storico</button><button class="btn pri" type="button" data-action="mkorder">Crea ordine</button></div>';
+  r.rows.forEach(function(x){var s=document.querySelector('[data-sub="'+x.id+'"]');if(s)s.textContent=eur(x.price)});
+  var bar=r.sub>0?r.rows.map(function(x){return '<i class="seg-'+x.id+'" style="flex:'+(x.price/r.sub).toFixed(4)+' 1 0"></i>'}).join(''):'';
+  var margin=r.net-r.cost;
+  el.innerHTML=
+    '<p class="eyebrow">Prezzo finale</p>'+
+    '<div class="big">'+eur(r.total)+'</div>'+
+    '<p class="muted">IVA '+nf(num(q.vat),0)+'% inclusa · imponibile '+eur(r.net)+'</p>'+
+    '<div class="bar" aria-hidden="true">'+bar+'</div>'+
+    '<dl class="tot"><dt>Costo di produzione</dt><dd class="mono">'+eur(r.cost)+'</dd><dt>Margine</dt><dd class="mono">'+eur(margin)+'</dd><dt>Totale</dt><dd class="mono strong">'+eur(r.total)+'</dd></dl>'+
+    '<div class="sum-acts">'+
+      '<button class="btn" type="button" data-action="saveq">Salva preventivo</button>'+
+      '<button class="btn pri" type="button" data-action="mkorder">Crea ordine</button>'+
+    '</div>';
 }
-
+function quoteRec(status){var r=calc(q);return {id:uid(),date:todayISO(),q:clone(q),net:r.net,total:r.total,status:status}}
 function histHTML(){
-  if(!state.quotes.length)return '<div class="empty" style="padding:15px;color:var(--muted)">Nessun preventivo salvato.</div>';
-  return '<div class="tw"><table><thead><tr><th>Lavorazione</th><th>Totale</th><th></th></tr></thead><tbody>'+state.quotes.map(r=>'<tr><td>'+esc(r.q.name||'Senza nome')+'</td><td>'+eur(r.total)+'</td><td><button class="btn ghost sm" data-action="delq" data-id="'+r.id+'">Elimina</button></td></tr>').join('')+'</tbody></table></div>';
+  if(!state.quotes.length)return '<div class="empty">Nessun preventivo salvato.</div>';
+  return '<div class="tw"><table><thead><tr><th>Data</th><th>Lavorazione</th><th>Totale</th><th>Stato</th><th></th></tr></thead><tbody>'+
+    state.quotes.map(function(r){
+      return '<tr><td>'+dshort(r.date)+'</td><td>'+esc(r.q.name||'—')+'</td><td class="mono">'+eur(r.total)+'</td><td>'+pill(r.status||'bozza')+'</td><td class="act"><button class="btn ghost sm" data-action="delq" data-id="'+r.id+'">Elimina</button></td></tr>';
+    }).join('')+'</tbody></table></div>';
 }
 
+/* ---- tabelle modificabili ---- */
+var COLS={};
+function cell(coll,it,c){
+  var v=it[c.k],a='data-coll="'+coll+'" data-id="'+it.id+'" data-key="'+c.k+'" data-t="'+c.t+'"';
+  switch(c.t){
+    case 'ro':return '<span>'+c.fmt(it)+'</span>';
+    case 'select':return '<select '+a+(c.pill?' class="st '+stClass(v)+'"':'')+'>'+c.o().map(function(o){return '<option value="'+esc(o[0])+'"'+(o[0]===v?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select>';
+    case 'number':return '<input '+a+' type="number" step="any" value="'+esc(v)+'">';
+    case 'date':return '<input '+a+' type="date" value="'+esc(v)+'">';
+    default:return '<input '+a+' type="text" value="'+esc(v)+'">';
+  }
+}
 function table(coll,cols,items,empty){
-  if(!items.length)return '<div class="empty" style="padding:15px;color:var(--muted)">'+empty+'</div>';
-  return '<div class="tw"><table><thead><tr>'+cols.map(c=>'<th>'+c.l+'</th>').join('')+'<th></th></tr></thead><tbody>'+
-    items.map(it=>'<tr>'+cols.map(c=>'<td>'+esc(it[c.k]||'—')+'</td>').join('')+'<td style="text-align:right"><button class="btn ghost sm" data-action="del" data-coll="'+coll+'" data-id="'+it.id+'">Elimina</button></td></tr>').join('')+
+  COLS[coll]=cols;
+  if(!items.length)return '<div class="empty">'+empty+'</div>';
+  return '<div class="tw"><table><thead><tr>'+cols.map(function(c){return '<th>'+c.l+'</th>'}).join('')+'<th></th></tr></thead><tbody>'+
+    items.map(function(it){return '<tr>'+cols.map(function(c){return '<td>'+cell(coll,it,c)+'</td>'}).join('')+'<td class="act"><button class="btn ghost sm" type="button" data-action="del" data-coll="'+coll+'" data-id="'+it.id+'">Elimina</button></td></tr>'}).join('')+
     '</tbody></table></div>';
 }
+function custOpts(){return [['','—']].concat(state.customers.map(function(c){return [c.id,c.name]}))}
+var NEW={
+  printers:function(){return {id:uid(),name:'Nuova stampante',watts:150,price:500,years:4,hoursDay:8,repair:10,status:'libera'}},
+  orders:function(){return {id:uid(),number:'AD-2026-001',customerId:'',name:'Nuova lavorazione',status:'nuovo',due:addDays(7),net:0,grams:0,hours:0,spoolId:'',deducted:false,booked:false}},
+  files:function(){return {id:uid(),name:'',kind:'STL',orderId:'',note:'',date:todayISO()}}
+};
+function addBtn(coll,label){return '<button class="btn pri" type="button" data-action="open-modal-add" data-coll="'+coll+'">'+label+'</button>'}
+function head(t,s,acts){return '<header class="ph"><div><h1>'+t+'</h1><p>'+s+'</p></div><div class="acts">'+(acts||'')+'</div></header>'}
 
-var VIEWS=[['panoramica','Panoramica'],['preventivi','Preventivi'],['ordini','Ordini'],['clienti','Clienti'],['magazzino','Magazzino'],['contabilita','Contabilità']];
+/* ---- viste ---- */
+var VIEWS=[['panoramica','Panoramica'],['preventivi','Preventivi'],['ordini','Ordini'],['clienti','Clienti'],['produzione','Produzione'],['magazzino','Magazzino'],['contabilita','Contabilità'],['archivio','Archivio file']];
 var V={};
-V.panoramica=()=>'<header class="ph"><h1>Panoramica</h1></header><div class="kpis"><div class="kpi"><small>Ordini attivi</small><b>'+state.orders.length+'</b></div><div class="kpi"><small>Clienti</small><b>'+state.customers.length+'</b></div></div>';
-V.preventivi=function(){if(!q)q=newQuote();return '<header class="ph"><h1>Preventivi</h1><button class="btn" data-action="newq">Nuovo</button></header><div class="qgrid"><form class="qform">'+sectionsHTML()+'</form><aside class="sum" id="summary"></aside></div><h2 style="margin:20px 0 10px">Storico</h2><div id="qhist">'+histHTML()+'</div>'};
-V.ordini=()=>'<header class="ph"><h1>Ordini</h1></header>'+table('orders',[{k:'number',l:'Num'},{k:'name',l:'Lavorazione'},{k:'status',l:'Stato'}],state.orders,'Nessun ordine');
-V.clienti=()=>'<header class="ph"><h1>Clienti</h1><button class="btn pri" data-action="open-modal-add" data-coll="customers">Nuovo cliente</button></header>'+table('customers',[{k:'name',l:'Nome'},{k:'phone',l:'Tel'},{k:'email',l:'Email'}],state.customers,'Nessun cliente');
-V.magazzino=()=>'<header class="ph"><h1>Magazzino Bobine</h1><button class="btn pri" data-action="open-modal-add" data-coll="spools">Nuova bobina</button></header>'+table('spools',[{k:'material',l:'Materiale'},{k:'colorName',l:'Colore'},{k:'residual',l:'Residuo g'}],state.spools,'Nessuna bobina');
-V.contabilita=()=>'<header class="ph"><h1>Contabilità</h1><button class="btn pri" data-action="open-modal-add" data-coll="movements">Nuovo movimento</button></header>'+table('movements',[{k:'date',l:'Data'},{k:'label',l:'Voce'},{k:'amount',l:'Importo €'}],state.movements,'Nessun movimento');
+V.panoramica=function(){
+  return head('Panoramica','Tutto sincronizzato in cloud con gli altri utenti.')+
+    '<div class="kpis"><div class="kpi"><small>Ordini attivi</small><b>'+state.orders.length+'</b></div></div>';
+};
+V.preventivi=function(){
+  if(!q)q=newQuote(false);
+  return head('Preventivi','Calcolo dei costi in tempo reale.','<button class="btn" type="button" data-action="newq">Nuovo preventivo</button>')+
+    '<div class="qgrid"><form class="qform" id="qform">'+sectionsHTML()+'</form><aside class="sum" id="summary"></aside></div>'+
+    '<h2 class="h2">Storico</h2><div id="qhist">'+histHTML()+'</div>';
+};
+V.ordini=function(){
+  var cols=[{k:'number',l:'Numero',t:'text'},{k:'name',l:'Lavorazione',t:'text'},{k:'status',l:'Stato',t:'select',pill:1,o:function(){return ST.map(function(s){return [s,cap(s)]})}}];
+  return head('Ordini','Modifiche visibili da tutti.',addBtn('orders','Nuovo ordine'))+table('orders',cols,state.orders,'Nessun ordine.');
+};
+V.clienti=function(){
+  return head('Clienti','Anagrafica condivisa.',addBtn('customers','Nuovo cliente'))+table('clienti',[{k:'name',l:'Nome',t:'text'},{k:'phone',l:'Telefono',t:'text'},{k:'email',l:'Email',t:'text'}],state.customers,'Nessun cliente.');
+};
+V.produzione=function(){return head('Produzione','Stampanti',addBtn('printers','Nuova'))+table('printers',[{k:'name',l:'Nome',t:'text'}],state.printers,'Nessuna.')};
+V.magazzino=function(){return head('Magazzino','Bobine',addBtn('spools','Nuova'))+table('spools',[{k:'material',l:'Materiale',t:'text'},{k:'colorName',l:'Colore',t:'text'},{k:'residual',l:'Residuo g',t:'number'}],state.spools,'Nessuna.')};
+V.contabilita=function(){return head('Contabilità','Movimenti',addBtn('movements','Nuovo'))+table('movements',[{k:'date',l:'Data',t:'date'},{k:'label',l:'Voce',t:'text'},{k:'amount',l:'Importo €',t:'number'}],state.movements,'Nessun movimento.')};
+V.archivio=function(){return head('Archivio','File',addBtn('files','Nuovo'))+table('files',[{k:'name',l:'Nome',t:'text'}],state.files,'Nessun file.')};
 
-var AFTER={preventivi:updateSummary};
-function nav(){$('#nav').innerHTML=VIEWS.map(v=>'<a href="#'+v[0]+'" class="'+(v[0]===view?'on':'')+'">'+v[1]+'</a>').join('')}
-function render(){nav();$('#view').innerHTML=V[view]();if(AFTER[view])AFTER[view]()}
-function route(){var h=location.hash.slice(1);view=VIEWS.some(v=>v[0]===h)?h:'panoramica';render()}
-
-var ACTIONS={
-  'open-modal-add':function(b){
-    var c=b.dataset.coll;
-    if(c==='customers'){
-      openModal('Nuovo Cliente', '<label class="fld"><span class="lbl">Nome</span><input type="text" id="m-name" required></label><label class="fld"><span class="lbl">Telefono</span><input type="text" id="m-phone"></label><label class="fld"><span class="lbl">Email</span><input type="email" id="m-email"></label>', function(){
-        state.customers.unshift({id:uid(), name:$('#m-name').value||'Cliente', phone:$('#m-phone').value, email:$('#m-email').value});
-        closeModal(); render(); toast('Cliente aggiunto');
-      });
-    } else if(c==='spools'){
-      openModal('Nuova Bobina', '<label class="fld"><span class="lbl">Materiale</span><select id="m-mat"><option>PLA</option><option>PETG</option><option>ABS</option></select></label><label class="fld"><span class="lbl">Colore</span><input type="text" id="m-color" value="Nero"></label><label class="fld"><span class="lbl">Grammi residui</span><input type="number" id="m-res" value="1000"></label>', function(){
-        state.spools.unshift({id:uid(), material:$('#m-mat').value, colorName:$('#m-color').value, residual:num($('#m-res').value)});
-        closeModal(); render(); toast('Bobina aggiunta');
-      });
-    } else if(c==='movements'){
-      openModal('Nuovo Movimento', '<label class="fld"><span class="lbl">Voce</span><input type="text" id="m-label" required></label><label class="fld"><span class="lbl">Importo €</span><input type="number" id="m-amount" step="any" required></label>', function(){
-        state.movements.unshift({id:uid(), date:todayISO(), label:$('#m-label').value, amount:num($('#m-amount').value)});
-        closeModal(); render(); toast('Movimento aggiunto');
-      });
-    }
-  },
-  newq:function(){q=newQuote();render();toast('Nuovo preventivo')},
-  saveq:function(){state.quotes.unshift({id:uid(),q:JSON.parse(JSON.stringify(q)),total:calc(q).total});$('#qhist').innerHTML=histHTML();toast('Salvato nello storico')},
-  mkorder:function(){var r=calc(q);state.orders.unshift({id:uid(),number:'AD-999',name:q.name||'Lavorazione',status:'nuovo',due:addDays(7)});toast('Ordine creato');location.hash='#ordini'},
-  del:function(b){state[b.dataset.coll]=state[b.dataset.coll].filter(x=>x.id!==b.dataset.id);render()},
-  delq:function(b){state.quotes=state.quotes.filter(x=>x.id!==b.dataset.id);$('#qhist').innerHTML=histHTML();}
+// Vista Impostazioni riservata all'admin
+V.impostazioni=function(){
+  var F=[['energy','Costo energia','€/kWh'],['prepMin','Preparazione','min'],['prepRate','Tariffa preparazione','€/h'],['postMin','Post-processing','min'],['postRate','Tariffa post-processing','€/h'],
+    ['markMat','Ricarico filamento','%'],['markEn','Ricarico elettricità','%'],['markLab','Ricarico manodopera','%'],['markMach','Ricarico macchina','%'],['markOther','Ricarico altri costi','%'],['minPrice','Prezzo minimo','€'],['vat','IVA','%']];
+  return head('Impostazioni','Valori di partenza (riservato Admin).')+
+    '<section class="sec"><div class="sec-h"><h3>Tariffe e ricarichi</h3></div><div class="fgrid">'+
+    F.map(function(f){return '<label class="fld"><span class="lbl">'+f[1]+'</span><div class="unit"><input type="number" step="any" min="0" inputmode="decimal" data-st="'+f[0]+'" value="'+esc(state.settings[f[0]])+'"><span>'+f[2]+'</span></div></label>'}).join('')+
+    '</div></section>';
 };
 
-document.addEventListener('click',function(e){var b=e.target.closest('[data-action]');if(b&&ACTIONS[b.dataset.action])ACTIONS[b.dataset.action](b)});
-$('#view').addEventListener('input',function(e){var t=e.target;if(t.dataset.qk){q[t.dataset.qk]=t.type==='number'?num(t.value):t.value;updateSummary()}});
+var AFTER={preventivi:function(){updateSummary()}};
+function nav(){
+  $('#nav').innerHTML=VIEWS.map(function(v){return '<a href="#'+v[0]+'" class="'+(v[0]===view?'on':'')+'">'+v[1]+'</a>'}).join('');
+}
+function render(){nav();$('#view').innerHTML=V[view]();if(AFTER[view])AFTER[view]()}
+function route(){
+  var h=location.hash.slice(1);
+  if(h === 'impostazioni' && userRole !== 'admin'){
+    h = 'panoramica';
+    location.hash = '#panoramica';
+  }
+  view=VIEWS.some(function(v){return v[0]===h})?h:'panoramica';
+  render();
+}
+
+var ACTIONS={
+  theme:function(){var th=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',th);localStorage.setItem(THEME_KEY,th)},
+  
+  openModalAdd:function(b){
+    var c=b.dataset.coll;
+    if(c==='customers'){
+      openModal('Nuovo Cliente', `
+        <label class="fld"><span class="lbl">Nome e Cognome</span><input type="text" id="m-name" required></label>
+        <label class="fld"><span class="lbl">Telefono</span><input type="text" id="m-phone"></label>
+        <label class="fld"><span class="lbl">Email</span><input type="email" id="m-email"></label>
+        <label class="fld"><span class="lbl">Note</span><textarea id="m-note" style="min-height:60px"></textarea></label>
+      `, async function(){
+        var item={
+          id:uid(),
+          name:$('#m-name').value || 'Nuovo Cliente',
+          phone:$('#m-phone').value,
+          email:$('#m-email').value,
+          note:$('#m-note').value
+        };
+        state.customers.unshift(item);
+        await saveData('customers', item);
+        closeModal();
+        render();
+        toast('Cliente aggiunto');
+      });
+    } else if(c==='spools'){
+      openModal('Nuova Bobina / Magazzino', `
+        <label class="fld"><span class="lbl">Materiale</span>
+          <select id="m-mat"><option>PLA</option><option>PETG</option><option>ABS</option><option>TPU</option><option>ASA</option></select>
+        </label>
+        <label class="fld"><span class="lbl">Nome Colore</span><input type="text" id="m-colorname" placeholder="es. Nero Opaco"></label>
+        <label class="fld"><span class="lbl">Colore (Tinta)</span><input type="color" id="m-color" value="#1d1d1f"></label>
+        <label class="fld"><span class="lbl">Prezzo bobina (€)</span><input type="number" id="m-price" value="20" step="any"></label>
+        <label class="fld"><span class="lbl">Peso totale (g)</span><input type="number" id="m-weight" value="1000"></label>
+        <label class="fld"><span class="lbl">Quantità Bobine</span><input type="number" id="m-qty" value="1" min="1"></label>
+      `, async function(){
+        var qty = parseInt($('#m-qty').value) || 1;
+        var w = parseFloat($('#m-weight').value) || 1000;
+        for(let i=0; i<qty; i++){
+          var item={
+            id:uid(),
+            material:$('#m-mat').value,
+            colorName:$('#m-colorname').value,
+            color:$('#m-color').value,
+            brand:'Generico',
+            price:parseFloat($('#m-price').value) || 20,
+            weight:w,
+            residual:w
+          };
+          state.spools.unshift(item);
+          await saveData('spools', item);
+        }
+        closeModal();
+        render();
+        toast('Bobina/e aggiunta/e');
+      });
+    } else if(c==='movements'){
+      openModal('Nuovo Movimento Contabile', `
+        <label class="fld"><span class="lbl">Data</span><input type="date" id="m-date" value="`+todayISO()+`"></label>
+        <label class="fld"><span class="lbl">Tipo</span>
+          <select id="m-type"><option value="entrata">Entrata</option><option value="uscita">Uscita</option></select>
+        </label>
+        <label class="fld"><span class="lbl">Descrizione / Voce</span><input type="text" id="m-label" required></label>
+        <label class="fld"><span class="lbl">Importo (€)</span><input type="number" id="m-amount" step="any" required></label>
+      `, async function(){
+        var item={
+          id:uid(),
+          date:$('#m-date').value || todayISO(),
+          type:$('#m-type').value,
+          label:$('#m-label').value || 'Movimento',
+          amount:parseFloat($('#m-amount').value) || 0
+        };
+        state.movements.unshift(item);
+        await saveData('movements', item);
+        closeModal();
+        render();
+        toast('Movimento registrato');
+      });
+    } else {
+      var item=NEW[c]();
+      state[c].unshift(item);
+      await saveData(c,item);
+      render();
+    }
+  },
+
+  add:async function(b){
+    var c=b.dataset.coll;
+    var item=NEW[c]();
+    state[c].unshift(item);
+    await saveData(c,item);
+    render();
+  },
+
+  newq:function(){q=newQuote(false);render();toast('Nuovo preventivo')},
+  addx:function(){q.extras.push({label:'',amount:0});$('#extras').innerHTML=extrasHTML();updateSummary()},
+  delx:function(b){q.extras.splice(+b.dataset.i,1);$('#extras').innerHTML=extrasHTML();updateSummary()},
+  
+  saveq:async function(){
+    var rec = quoteRec('bozza');
+    state.quotes.unshift(rec);
+    await saveData('quotes', rec);
+    $('#qhist').innerHTML = histHTML();
+    toast('Preventivo salvato nello storico');
+  },
+
+  mkorder:async function(){
+    var r=calc(q);var o={id:uid(),number:'AD-2026-999',name:q.name||'Lavorazione',status:'nuovo',due:addDays(7),net:r.net,grams:q.grams,hours:q.hours};
+    state.orders.unshift(o);await saveData('orders',o);toast('Ordine creato');location.hash='#ordini';
+  },
+
+  del:async function(b){var c=b.dataset.coll,id=b.dataset.id;state[c]=state[c].filter(x=>x.id!==id);await deleteData(c,id);render()},
+  delq:async function(b){var id=b.dataset.id;state.quotes=state.quotes.filter(x=>x.id!==id);await deleteData('quotes',id);$('#qhist').innerHTML=histHTML();toast('Preventivo eliminato')}
+};
+
+document.addEventListener('click',function(e){
+  var b=e.target.closest('[data-action]');
+  if(!b)return;
+  var act = b.dataset.action;
+  if(act === 'open-modal-add'){ ACTIONS.openModalAdd(b); }
+  else if(ACTIONS[act]){ ACTIONS[act](b); }
+});
+
+document.addEventListener('submit',function(e){e.preventDefault()});
+
+$('#view').addEventListener('input',function(e){
+  var t=e.target;if(t.dataset.qk!==undefined){q[t.dataset.qk]=t.type==='number'?num(t.value):t.value;updateSummary()}
+});
+$('#view').addEventListener('change',async function(e){
+  var t=e.target;
+  if(t.dataset.st && userRole === 'admin'){
+    state.settings[t.dataset.st]=num(t.value);
+    await saveData('settings', state.settings);
+    toast('Impostazione aggiornata');
+    return;
+  }
+  if(t.dataset.coll){
+    var coll=t.dataset.coll,it=state[coll].find(function(x){return x.id===t.dataset.id});if(!it)return;
+    it[t.dataset.key]=t.dataset.t==='number'?num(t.value):t.value;
+    await saveData(coll,it);
+    if(t.dataset.pill)t.className='st '+stClass(t.value);
+  }
+});
 addEventListener('hashchange',route);
+
+try{var th=localStorage.getItem(THEME_KEY);if(th)document.documentElement.setAttribute('data-theme',th)}catch(e){}
+checkUser();
+})();
 </script>
 </body>
 </html>
