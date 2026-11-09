@@ -476,7 +476,7 @@ async function initApp(user){
       .from('profiles')
       .select('role')
       .eq('id', user.id)
-      .single();
+      .maybeSingle();
     if(data) userRole = data.role;
   }
 
@@ -491,16 +491,21 @@ async function initApp(user){
   route();
 }
 
-/* Sincronizzazione Database Supabase */
+/* Sincronizzazione Database Supabase Corretta */
 async function loadCloudData(){
   if(!supabaseClient) return;
-  let { data: settingsData } = await supabaseClient.from('settings').select('*').eq('id', 1).single();
-  if(settingsData) state.settings = settingsData;
+  try {
+    let { data: settingsData } = await supabaseClient.from('settings').select('*').eq('id', 1).maybeSingle();
+    if(settingsData) state.settings = settingsData;
 
-  const tables = ['customers', 'printers', 'spools', 'orders', 'quotes', 'movements', 'files'];
-  for(let t of tables){
-    let { data } = await supabaseClient.from(t).select('*');
-    if(data) state[t] = data;
+    const tables = ['customers', 'printers', 'spools', 'orders', 'quotes', 'movements', 'files'];
+    for(let t of tables){
+      let { data, error } = await supabaseClient.from(t).select('*');
+      if(data) state[t] = data;
+      if(error) console.error('Errore caricamento tabella ' + t, error.message);
+    }
+  } catch(err) {
+    console.error('Errore di connessione a Supabase:', err);
   }
 }
 
@@ -519,12 +524,28 @@ function setupRealtime(){
 
 async function saveData(table, item){
   if(!supabaseClient) return;
-  await supabaseClient.from(table).upsert(item);
+  try {
+    const { error } = await supabaseClient.from(table).upsert(item);
+    if(error) {
+      console.error('Errore salvataggio su ' + table + ':', error.message);
+      toast('Errore salvataggio: ' + error.message);
+    }
+  } catch(err) {
+    console.error('Eccezione durante il salvataggio:', err);
+  }
 }
 
 async function deleteData(table, id){
   if(!supabaseClient) return;
-  await supabaseClient.from(table).delete().eq('id', id);
+  try {
+    const { error } = await supabaseClient.from(table).delete().eq('id', id);
+    if(error) {
+      console.error('Errore eliminazione da ' + table + ':', error.message);
+      toast('Errore eliminazione: ' + error.message);
+    }
+  } catch(err) {
+    console.error('Eccezione durante l\'eliminazione:', err);
+  }
 }
 
 function loadMockData(){
