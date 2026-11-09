@@ -235,8 +235,7 @@ select.st{padding:5px 8px;min-width:118px}
 
 <script>
 /* ================= CONFIGURAZIONE SUPABASE ================= */
-/* Sostituisci questi valori con i tuoi dati reali presi da Supabase (o usa le variabili d'ambiente su Netlify) */
-const SUPABASE_URL = window.SUPABASE_URL || 'https://hnolrnviraoknrxncqdk.supabase.co/rest/v1/';
+const SUPABASE_URL = window.SUPABASE_URL || 'https://hnolrnviraoknrxncqdk.supabase.co';
 const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || 'sb_publishable_yLiy6rrZ4odJx7khvDgtdA_AR0vHS-r';
 
 let supabaseClient = null;
@@ -309,12 +308,12 @@ function calc(q){
   return {hrs:hrs,rows:rows,cost:cost,sub:sub,minApplied:minApplied,net:net,vat:vat,total:Math.round((net+vat)*100)/100};
 }
 
-/* ---------- Applicazione Cloud ---------- */
+/* ---------- Applicazione Cloud & Gestione Ruoli ---------- */
 (function(){
 'use strict';
 var THEME_KEY='adlab3d-theme';
 function $(s,r){return (r||document).querySelector(s)}
-function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;P'}[c]})}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function uid(){return Math.random().toString(36).slice(2,9)}
 function pad(n){return String(n).padStart(2,'0')}
 function iso(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
@@ -333,6 +332,7 @@ let state = {
 var q=null;
 var view='panoramica';
 let isSignUp = false;
+let userRole = 'user'; // Di default utente normale
 
 /* Gestione Autenticazione UI */
 const authScreen = $('#auth-screen');
@@ -375,7 +375,6 @@ $('#logoutbtn').addEventListener('click', async () => {
 
 async function checkUser(){
   if(!supabaseClient){
-    // Fallback se supabase non è configurato
     authScreen.style.display = 'none';
     appContainer.style.display = 'block';
     loadMockData();
@@ -394,6 +393,24 @@ async function initApp(user){
   authScreen.style.display = 'none';
   appContainer.style.display = 'block';
   $('#user-email-display').textContent = user.email;
+
+  // Recupera il ruolo dell'utente dalla tabella profiles
+  if(supabaseClient){
+    let { data } = await supabaseClient
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+    if(data) userRole = data.role;
+  }
+
+  // Se l'utente è admin, aggiungi la vista Impostazioni nel menu
+  if(userRole === 'admin'){
+    if(!VIEWS.some(function(v){return v[0]==='impostazioni'})){
+      VIEWS.push(['impostazioni', 'Impostazioni']);
+    }
+  }
+
   await loadCloudData();
   setupRealtime();
   route();
@@ -402,7 +419,6 @@ async function initApp(user){
 /* Sincronizzazione Database Supabase */
 async function loadCloudData(){
   if(!supabaseClient) return;
-  // Caricamento impostazioni e tabelle da Supabase
   let { data: settingsData } = await supabaseClient.from('settings').select('*').single();
   if(settingsData) state.settings = settingsData;
 
@@ -608,12 +624,31 @@ V.magazzino=function(){return head('Magazzino','Bobine',addBtn('spools','Nuova')
 V.contabilita=function(){return head('Contabilità','Movimenti',addBtn('movements','Nuovo'))+table('movements',[{k:'label',l:'Voce',t:'text'}],state.movements,'Nessun movimento.')};
 V.archivio=function(){return head('Archivio','File',addBtn('files','Nuovo'))+table('files',[{k:'name',l:'Nome',t:'text'}],state.files,'Nessun file.')};
 
+// Vista Impostazioni riservata all'admin
+V.impostazioni=function(){
+  var F=[['energy','Costo energia','€/kWh'],['prepMin','Preparazione','min'],['prepRate','Tariffa preparazione','€/h'],['postMin','Post-processing','min'],['postRate','Tariffa post-processing','€/h'],
+    ['markMat','Ricarico filamento','%'],['markEn','Ricarico elettricità','%'],['markLab','Ricarico manodopera','%'],['markMach','Ricarico macchina','%'],['markOther','Ricarico altri costi','%'],['minPrice','Prezzo minimo','€'],['vat','IVA','%']];
+  return head('Impostazioni','Valori di partenza (riservato Admin).')+
+    '<section class="sec"><div class="sec-h"><h3>Tariffe e ricarichi</h3></div><div class="fgrid">'+
+    F.map(function(f){return '<label class="fld"><span class="lbl">'+f[1]+'</span><div class="unit"><input type="number" step="any" min="0" inputmode="decimal" data-st="'+f[0]+'" value="'+esc(state.settings[f[0]])+'"><span>'+f[2]+'</span></div></label>'}).join('')+
+    '</div></section>';
+};
+
 var AFTER={preventivi:function(){updateSummary()}};
 function nav(){
   $('#nav').innerHTML=VIEWS.map(function(v){return '<a href="#'+v[0]+'" class="'+(v[0]===view?'on':'')+'">'+v[1]+'</a>'}).join('');
 }
 function render(){nav();$('#view').innerHTML=V[view]();if(AFTER[view])AFTER[view]()}
-function route(){var h=location.hash.slice(1);view=VIEWS.some(function(v){return v[0]===h})?h:'panoramica';render()}
+function route(){
+  var h=location.hash.slice(1);
+  // Protezione rotta: se non è admin e prova ad andare su impostazioni, bloccalo
+  if(h === 'impostazioni' && userRole !== 'admin'){
+    h = 'panoramica';
+    location.hash = '#panoramica';
+  }
+  view=VIEWS.some(function(v){return v[0]===h})?h:'panoramica';
+  render();
+}
 
 var ACTIONS={
   theme:function(){var th=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',th);localStorage.setItem(THEME_KEY,th)},
@@ -636,6 +671,12 @@ $('#view').addEventListener('input',function(e){
 });
 $('#view').addEventListener('change',async function(e){
   var t=e.target;
+  if(t.dataset.st && userRole === 'admin'){
+    state.settings[t.dataset.st]=num(t.value);
+    await saveData('settings', state.settings);
+    toast('Impostazione aggiornata');
+    return;
+  }
   if(t.dataset.coll){
     var coll=t.dataset.coll,it=state[coll].find(function(x){return x.id===t.dataset.id});if(!it)return;
     it[t.dataset.key]=t.dataset.t==='number'?num(t.value):t.value;
