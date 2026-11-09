@@ -54,6 +54,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .auth-form{display:flex;flex-direction:column;gap:14px}
 .auth-toggle{margin-top:16px;text-align:center;font-size:13px;color:var(--muted)}
 .auth-toggle a{color:var(--accent);text-decoration:none;font-weight:500;cursor:pointer}
+.auth-error{color:var(--bad);font-size:13px;margin-top:4px;display:none}
 
 /* Modal Popup */
 .modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:100;opacity:0;pointer-events:none;transition:opacity .2s}
@@ -209,6 +210,7 @@ select.st{padding:5px 8px;min-width:118px}
     <form id="auth-form" class="auth-form">
       <label class="fld"><span class="lbl">Email</span><input type="email" id="auth-email" required placeholder="nome@email.it"></label>
       <label class="fld"><span class="lbl">Password</span><input type="password" id="auth-password" required placeholder="••••••••"></label>
+      <div id="auth-error" class="auth-error"></div>
       <button class="btn pri w-full" type="submit" id="auth-submit">Accedi</button>
     </form>
     <div class="auth-toggle">
@@ -260,11 +262,12 @@ select.st{padding:5px 8px;min-width:118px}
 
 <script>
 /* ================= CONFIGURAZIONE SUPABASE ================= */
+// Inserisci qui l'URL pulito del tuo progetto Supabase (es. https://xxxxxx.supabase.co)
 const SUPABASE_URL = window.SUPABASE_URL || 'https://hnolrnviraoknrxncqdk.supabase.co';
 const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || 'sb_publishable_yLiy6rrZ4odJx7khvDgtdA_AR0vHS-r';
 
 let supabaseClient = null;
-if(window.supabase && SUPABASE_URL !== 'IL_TUO_SUPABASE_URL'){
+if(window.supabase && SUPABASE_URL){
   supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
 
@@ -360,7 +363,7 @@ let isSignUp = false;
 let userRole = 'user';
 let activeModalCallback = null;
 
-/* Gestione Autenticazione UI */
+/* Gestione Autenticazione UI & Fix Pulsante Registrati */
 const authScreen = $('#auth-screen');
 const appContainer = $('#app-container');
 const authForm = $('#auth-form');
@@ -368,9 +371,12 @@ const authTitle = $('#auth-title');
 const authSubmit = $('#auth-submit');
 const authToggleBtn = $('#auth-toggle-btn');
 const authToggleText = $('#auth-toggle-text');
+const authError = $('#auth-error');
 
-authToggleBtn.addEventListener('click', () => {
+authToggleBtn.addEventListener('click', (e) => {
+  e.preventDefault();
   isSignUp = !isSignUp;
+  authError.style.display = 'none';
   authTitle.textContent = isSignUp ? 'Crea un account' : 'Accedi al gestionale';
   authSubmit.textContent = isSignUp ? 'Registrati' : 'Accedi';
   authToggleText.textContent = isSignUp ? 'Hai già un account?' : 'Non hai un account?';
@@ -379,18 +385,47 @@ authToggleBtn.addEventListener('click', () => {
 
 authForm.addEventListener('submit', async (e) => {
   e.preventDefault();
-  if(!supabaseClient){ alert('Configura prima le credenziali di Supabase nel codice!'); return; }
-  const email = $('#auth-email').value;
+  authError.style.display = 'none';
+  
+  if(!supabaseClient){ 
+    alert('Configura prima le credenziali di Supabase nel codice!'); 
+    return; 
+  }
+  
+  const email = $('#auth-email').value.trim();
   const password = $('#auth-password').value;
   
-  if(isSignUp){
-    const { data, error } = await supabaseClient.auth.signUp({ email, password });
-    if(error) alert(error.message);
-    else { alert('Registrazione avvenuta! Controlla la tua email o accedi.'); isSignUp = false; authForm.reset(); }
-  } else {
-    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-    if(error) alert(error.message);
-    else { initApp(data.user); }
+  authSubmit.disabled = true;
+  authSubmit.textContent = isSignUp ? 'Registrazione in corso...' : 'Accesso in corso...';
+
+  try {
+    if(isSignUp){
+      const { data, error } = await supabaseClient.auth.signUp({ email, password });
+      if(error) throw error;
+      alert('Registrazione avvenuta con successo! Ora puoi effettuare il login.');
+      isSignUp = false;
+      authTitle.textContent = 'Accedi al gestionale';
+      authSubmit.textContent = 'Accedi';
+      authToggleText.textContent = 'Non hai un account?';
+      authToggleBtn.textContent = 'Registrati';
+      authForm.reset();
+    } else {
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if(error) throw error;
+      if(data.user) {
+        initApp(data.user);
+      }
+    }
+  } catch (err) {
+    authError.textContent = err.message || 'Errore durante l\'autenticazione.';
+    authError.style.display = 'block';
+  } finally {
+    authSubmit.disabled = false;
+    if(!isSignUp && authSubmit.textContent.includes('Accesso')) {
+      authSubmit.textContent = 'Accedi';
+    } else if(isSignUp && authSubmit.textContent.includes('Registrazione')) {
+      authSubmit.textContent = 'Registrati';
+    }
   }
 });
 
@@ -407,7 +442,7 @@ async function checkUser(){
     return;
   }
   const { data: { session } } = await supabaseClient.auth.getSession();
-  if(session){
+  if(session && session.user){
     initApp(session.user);
   } else {
     authScreen.style.display = 'flex';
@@ -421,12 +456,16 @@ async function initApp(user){
   $('#user-email-display').textContent = user.email;
 
   if(supabaseClient){
-    let { data } = await supabaseClient
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-    if(data) userRole = data.role;
+    try {
+      let { data } = await supabaseClient
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+      if(data) userRole = data.role;
+    } catch(e) {
+      userRole = 'user';
+    }
   }
 
   if(userRole === 'admin'){
@@ -477,7 +516,7 @@ async function deleteData(table, id){
 }
 
 function loadMockData(){
-  state.customers = [{id:uid(), name:'Cliente Esempio', phone:'3331234567', email:'cliente@esempio.it', note:''} ];
+  state.customers = [{id:uid(), name:'Cliente Esempio', phone:'3331234567', email:'cliente@esempio.it', note:''}];
 }
 
 /* ---- Gestione Modali (Pop-up) ---- */
@@ -718,7 +757,7 @@ var ACTIONS={
         <label class="fld"><span class="lbl">Colore (Tinta)</span><input type="color" id="m-color" value="#1d1d1f"></label>
         <label class="fld"><span class="lbl">Prezzo bobina (€)</span><input type="number" id="m-price" value="20" step="any"></label>
         <label class="fld"><span class="lbl">Peso totale (g)</span><input type="number" id="m-weight" value="1000"></label>
-        <label class="fld"><span class="lbl">Quantità Bobine (moltiplica residuo)</span><input type="number" id="m-qty" value="1" min="1"></label>
+        <label class="fld"><span class="lbl">Quantità Bobine</span><input type="number" id="m-qty" value="1" min="1"></label>
       `, async function(){
         var qty = parseInt($('#m-qty').value) || 1;
         var w = parseFloat($('#m-weight').value) || 1000;
@@ -742,7 +781,7 @@ var ACTIONS={
       });
     } else if(c==='movements'){
       openModal('Nuovo Movimento Contabile', `
-        <label class="fld"><span class="lbl">Data</span><input type="date" id="m-date" value="'+todayISO()+'"></label>
+        <label class="fld"><span class="lbl">Data</span><input type="date" id="m-date" value="`+todayISO()+`"></label>
         <label class="fld"><span class="lbl">Tipo</span>
           <select id="m-type"><option value="entrata">Entrata</option><option value="uscita">Uscita</option></select>
         </label>
@@ -763,8 +802,7 @@ var ACTIONS={
         toast('Movimento registrato');
       });
     } else {
-      // Default generico
-      var item=NEW[c]();
+      var item={id:uid(), name:'Nuovo elemento'};
       state[c].unshift(item);
       await saveData(c,item);
       render();
