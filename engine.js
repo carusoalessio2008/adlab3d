@@ -35,9 +35,9 @@ export function parseGcode(txt) {
     }
   }
   const wre = [
-    /;\s*total filament weight \[g\]\s*[=:]\s*([ \d.,]+)/i,
-    /;\s*total filament used \[g\]\s*[=:]\s*([ \d.,]+)/i,
-    /;\s*filament used \[g\]\s*[=:]\s*([ \d.,]+)/i
+    /;\s*total filament weight [g]\s*[=:]\s*([ \d.,]+)/i,
+    /;\s*total filament used [g]\s*[=:]\s*([ \d.,]+)/i,
+    /;\s*filament used [g]\s*[=:]\s*([ \d.,]+)/i
   ];
   for (const re of wre) {
     const w = txt.match(re);

@@ -11,10 +11,6 @@ import {
 import { firebaseConfig } from "./firebase-config.js";
 import { num, parseGcode, calcQuote } from "./engine.js";
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -26,42 +22,17 @@ const dshort = s => { if (!s) return '—'; const d = new Date(s + 'T00:00'); re
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
 const clone = o => JSON.parse(JSON.stringify(o));
 
-const state = {
-  settings: {
-    energy: 0.30, prepMin: 5, prepRate: 15, postMin: 5, postRate: 15,
-    markMat: 30, markEn: 0, markLab: 0, markMach: 20, markOther: 0, minPrice: 3, vat: 22
-  },
-  customers: [], printers: [], spools: [], orders: [], quotes: [], movements: [], files: []
-};
-
-let q = null;
-let view = 'panoramica';
+/* ================= 1. COLLEGAMENTO IMMEDIATO PULSANTI UI ================= */
 let authMode = 'login';
-let userRole = 'user';
-let activeModalCallback = null;
-let unsubscribers = [];
 
-const VIEWS = [
-  ['panoramica', 'Panoramica'],
-  ['preventivi', 'Preventivi'],
-  ['ordini', 'Ordini'],
-  ['clienti', 'Clienti'],
-  ['produzione', 'Stampanti'],
-  ['magazzino', 'Magazzino'],
-  ['contabilita', 'Contabilità'],
-  ['archivio', 'Archivio file']
-];
-
-let toastTimer;
-function toast(msg) {
-  const t = $('#toast');
-  t.textContent = msg;
-  t.classList.add('on');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('on'), 2800);
+function showAuthErr(msg) {
+  const errBox = $('#auth-error');
+  if (errBox) {
+    errBox.textContent = msg;
+    errBox.style.display = 'block';
+  }
 }
 
-/* ================= AUTHENTICATION ================= */
 function setAuthMode(mode) {
   authMode = mode;
   $('#auth-error').style.display = 'none';
@@ -94,21 +65,47 @@ function setAuthMode(mode) {
   }
 }
 
-$('#forgot-pwd-btn').addEventListener('click', () => setAuthMode('reset'));
+$('#forgot-pwd-btn')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  setAuthMode('reset');
+});
 
-$('#auth-toggle-btn').addEventListener('click', () => {
+$('#auth-toggle-btn')?.addEventListener('click', (e) => {
+  e.preventDefault();
   setAuthMode(authMode === 'login' ? 'signup' : 'login');
 });
 
-$('#toggle-pwd-vis').addEventListener('click', () => {
+$('#toggle-pwd-vis')?.addEventListener('click', (e) => {
+  e.preventDefault();
   const inp = $('#auth-password');
   const isHidden = inp.type === 'password';
   inp.type = isHidden ? 'text' : 'password';
   $('#toggle-pwd-vis').textContent = isHidden ? '🙈' : '👁️';
 });
 
-$('#auth-form').addEventListener('submit', async (e) => {
+/* ================= 2. INIZIALIZZAZIONE SICURA FIREBASE ================= */
+let app = null, auth = null, db = null;
+
+try {
+  if (!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey === "LA_TUA_API_KEY") {
+    throw new Error("Configurazione mancante: inserisci le chiavi reali in firebase-config.js.");
+  }
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+} catch (initErr) {
+  console.error("Errore Firebase:", initErr);
+  showAuthErr(initErr.message);
+}
+
+/* ================= 3. INVIO FORM LOGIN / REGISTRAZIONE / RESET ================= */
+$('#auth-form')?.addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (!auth) {
+    showAuthErr("Firebase non è configurato correttamente. Controlla firebase-config.js.");
+    return;
+  }
+
   const email = $('#auth-email').value.trim();
   const password = $('#auth-password').value;
   const errBox = $('#auth-error');
@@ -135,7 +132,7 @@ $('#auth-form').addEventListener('submit', async (e) => {
     }
   } catch (err) {
     const code = err.code || '';
-    let msg = 'Errore durante l\'operazione.';
+    let msg = err.message;
     if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
       msg = 'Email o password non corretti.';
     } else if (code === 'auth/too-many-requests') {
@@ -144,47 +141,91 @@ $('#auth-form').addEventListener('submit', async (e) => {
       msg = 'La password deve avere almeno 6 caratteri.';
     } else if (code === 'auth/email-already-in-use') {
       msg = 'Questa email è già registrata.';
+    } else if (code === 'auth/unauthorized-domain') {
+      msg = 'Dominio non autorizzato su Firebase Console (Authentication -> Settings -> Authorized domains).';
     }
-    errBox.textContent = msg;
-    errBox.style.display = 'block';
+    showAuthErr(msg);
   } finally {
     btn.disabled = false;
   }
 });
 
-$('#logoutbtn').addEventListener('click', () => signOut(auth));
+$('#logoutbtn')?.addEventListener('click', () => { if (auth) signOut(auth); });
 
-onAuthStateChanged(auth, async (user) => {
-  unsubscribers.forEach(u => u());
-  unsubscribers = [];
+/* ================= 4. STATO E LISTENER SESSIONE ================= */
+const state = {
+  settings: {
+    companyName: 'ADLAB3D',
+    companyTagline: 'Idee stampate in grande · Prototipazione & Stampa 3D',
+    companyAddress: 'Udine (UD), Friuli Venezia Giulia',
+    companyContacts: 'info@adlab3d.it · carusoalessio200@gmail.com',
+    companyTax: 'Prestazione Occasionale / Regime Forfettario',
+    quoteNotes: 'Validità preventivo: 15 giorni. Tempi di consegna stimati da concordare alla conferma d\'ordine.',
+    energy: 0.30, prepMin: 5, prepRate: 15, postMin: 5, postRate: 15,
+    markMat: 30, markEn: 0, markLab: 0, markMach: 20, markOther: 0, minPrice: 3, vat: 22
+  },
+  customers: [], printers: [], spools: [], orders: [], quotes: [], movements: [], files: []
+};
 
-  if (!user) {
-    $('#auth-screen').style.display = 'flex';
-    $('#app-container').style.display = 'none';
-    setAuthMode('login');
-    return;
-  }
+let q = null;
+let view = 'panoramica';
+let userRole = 'user';
+let activeModalCallback = null;
+let unsubscribers = [];
 
-  $('#auth-screen').style.display = 'none';
-  $('#app-container').style.display = 'block';
-  $('#user-email-display').textContent = user.email;
+const VIEWS = [
+  ['panoramica', 'Panoramica'],
+  ['preventivi', 'Preventivi'],
+  ['ordini', 'Ordini'],
+  ['clienti', 'Clienti'],
+  ['produzione', 'Stampanti'],
+  ['magazzino', 'Magazzino'],
+  ['contabilita', 'Contabilità'],
+  ['archivio', 'Archivio file']
+];
 
-  const userSnap = await getDoc(doc(db, 'users', user.uid));
-  if (userSnap.exists()) {
-    userRole = userSnap.data().role || 'user';
-  } else {
-    await setDoc(doc(db, 'users', user.uid), { email: user.email, role: 'user' });
-  }
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('on'), 2800);
+}
 
-  if (userRole === 'admin' && !VIEWS.some(v => v[0] === 'impostazioni')) {
-    VIEWS.push(['impostazioni', 'Impostazioni']);
-  }
+if (auth) {
+  onAuthStateChanged(auth, async (user) => {
+    unsubscribers.forEach(u => u());
+    unsubscribers = [];
 
-  startRealtimeSync();
-  route();
-});
+    if (!user) {
+      $('#auth-screen').style.display = 'flex';
+      $('#app-container').style.display = 'none';
+      setAuthMode('login');
+      return;
+    }
 
-/* ================= FIRESTORE REAL-TIME SYNC ================= */
+    $('#auth-screen').style.display = 'none';
+    $('#app-container').style.display = 'block';
+    $('#user-email-display').textContent = user.email;
+
+    const userSnap = await getDoc(doc(db, 'users', user.uid));
+    if (userSnap.exists()) {
+      userRole = userSnap.data().role || 'user';
+    } else {
+      await setDoc(doc(db, 'users', user.uid), { email: user.email, role: 'user' });
+    }
+
+    if (userRole === 'admin' && !VIEWS.some(v => v[0] === 'impostazioni')) {
+      VIEWS.push(['impostazioni', 'Impostazioni']);
+    }
+
+    startRealtimeSync();
+    route();
+  });
+}
+
+/* ================= 5. FIRESTORE REAL-TIME SYNC ================= */
 function startRealtimeSync() {
   unsubscribers.push(onSnapshot(doc(db, 'settings', 'global'), (snap) => {
     if (snap.exists()) Object.assign(state.settings, snap.data());
@@ -215,7 +256,7 @@ async function removeDoc(coll, id) {
   await deleteDoc(doc(db, coll, id));
 }
 
-/* ================= MODALI ================= */
+/* ================= 6. MODALI ================= */
 function openModal(title, html, onSave) {
   $('#modal-title').textContent = title;
   $('#modal-body').innerHTML = html;
@@ -230,7 +271,7 @@ $('#modal-close').addEventListener('click', closeModal);
 $('#modal-cancel').addEventListener('click', closeModal);
 $('#modal-save').addEventListener('click', () => { if (activeModalCallback) activeModalCallback(); });
 
-/* ================= LOGICA PREVENTIVI ================= */
+/* ================= 7. LOGICA PREVENTIVI ================= */
 function newQuote() {
   const s = state.settings, p = state.printers[0], sp = state.spools[0];
   return {
@@ -351,13 +392,214 @@ function updateSummary() {
       <dt>Totale cliente</dt><dd class="mono strong">${eur(r.total)}</dd>
     </dl>
     <div class="sum-acts">
+      <button class="btn" type="button" data-action="pdfq">📄 Esporta PDF (Carta Intestata)</button>
       <button class="btn" type="button" data-action="copyq">Copia testo per cliente</button>
       <button class="btn" type="button" data-action="saveq">Salva nello storico</button>
       <button class="btn pri" type="button" data-action="mkorder">Converti in Ordine</button>
     </div>`;
 }
 
-/* ================= VISTE ================= */
+/* ================= 8. ESPORTAZIONE PDF SU CARTA INTESTATA ================= */
+function generateQuotePDF(quoteData, quoteDate = todayISO(), quoteCode = null) {
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    toast('Libreria PDF non caricata. Ricarica la pagina.');
+    return;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const docPdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const r = calcQuote(quoteData);
+  const s = state.settings;
+  const cust = state.customers.find(c => c.id === quoteData.customerId);
+  const spool = state.spools.find(sp => sp.id === quoteData.spoolId);
+  const docNum = quoteCode || `PREV-${new Date().getFullYear()}-${String(state.quotes.length + 1).padStart(3, '0')}`;
+
+  const dark = [19, 22, 30];
+  const muted = [95, 103, 120];
+  const accent = [217, 72, 15];
+  const lightBg = [245, 246, 250];
+  const lineCol = [218, 222, 230];
+
+  // Barra superiore arancione
+  docPdf.setFillColor(...accent);
+  docPdf.rect(0, 0, 210, 4, 'F');
+
+  // Logo vettoriale cubo isometrico ADLAB3D
+  docPdf.setFillColor(74, 80, 92);
+  docPdf.triangle(25, 14, 34, 19, 25, 24, 'F');
+  docPdf.triangle(25, 14, 16, 19, 25, 24, 'F');
+  docPdf.setFillColor(26, 29, 36);
+  docPdf.triangle(16, 19, 25, 24, 25, 34, 'F');
+  docPdf.triangle(16, 19, 16, 29, 25, 34, 'F');
+  docPdf.setFillColor(11, 12, 16);
+  docPdf.triangle(25, 24, 34, 19, 34, 29, 'F');
+  docPdf.triangle(25, 24, 25, 34, 34, 29, 'F');
+  docPdf.setDrawColor(...accent);
+  docPdf.setLineWidth(0.9);
+  docPdf.line(25, 34, 25, 24);
+  docPdf.line(25, 34, 16, 29);
+  docPdf.line(25, 34, 34, 29);
+
+  // Intestazione Azienda (Sinistra)
+  docPdf.setFont('helvetica', 'bold');
+  docPdf.setFontSize(20);
+  docPdf.setTextColor(...dark);
+  docPdf.text(s.companyName || 'ADLAB3D', 39, 21);
+
+  docPdf.setFont('helvetica', 'normal');
+  docPdf.setFontSize(9.5);
+  docPdf.setTextColor(...accent);
+  docPdf.text(s.companyTagline || 'Idee stampate in grande', 39, 26.5);
+
+  docPdf.setFontSize(8.5);
+  docPdf.setTextColor(...muted);
+  docPdf.text(s.companyAddress || '', 39, 31.5);
+  docPdf.text(s.companyContacts || '', 39, 35.5);
+
+  // Riquadro Documento (Destra)
+  docPdf.setFont('helvetica', 'bold');
+  docPdf.setFontSize(14);
+  docPdf.setTextColor(...dark);
+  docPdf.text('PREVENTIVO', 194, 21, { align: 'right' });
+
+  docPdf.setFont('helvetica', 'normal');
+  docPdf.setFontSize(9.5);
+  docPdf.setTextColor(...muted);
+  docPdf.text(`N. ${docNum}`, 194, 27, { align: 'right' });
+  docPdf.text(`Data: ${new Date(quoteDate + 'T00:00').toLocaleDateString('it-IT')}`, 194, 32, { align: 'right' });
+
+  // Linea divisoria header
+  docPdf.setDrawColor(...lineCol);
+  docPdf.setLineWidth(0.4);
+  docPdf.line(16, 42, 194, 42);
+
+  // Box Destinatario (Cliente)
+  docPdf.setFillColor(...lightBg);
+  docPdf.roundedRect(16, 48, 178, 26, 2, 2, 'F');
+
+  docPdf.setFont('helvetica', 'bold');
+  docPdf.setFontSize(8);
+  docPdf.setTextColor(...muted);
+  docPdf.text('SPETT.LE CLIENTE', 21, 54);
+
+  docPdf.setFont('helvetica', 'bold');
+  docPdf.setFontSize(11);
+  docPdf.setTextColor(...dark);
+  docPdf.text(cust ? cust.name : 'Cliente Privato / Da definire', 21, 60.5);
+
+  docPdf.setFont('helvetica', 'normal');
+  docPdf.setFontSize(9);
+  docPdf.setTextColor(...muted);
+  const custDetails = [cust?.email, cust?.phone, cust?.note].filter(Boolean).join('  ·  ');
+  docPdf.text(custDetails || 'Riferimento preventivo stampa 3D su misura', 21, 66.5);
+
+  // Tabella Voci Preventivo
+  let y = 84;
+  docPdf.setFillColor(...dark);
+  docPdf.rect(16, y, 178, 8.5, 'F');
+  docPdf.setFont('helvetica', 'bold');
+  docPdf.setFontSize(8.5);
+  docPdf.setTextColor(255, 255, 255);
+  docPdf.text('DESCRIZIONE LAVORAZIONE / FORNITURA', 20, y + 5.7);
+  docPdf.text('IMPORTO', 190, y + 5.7, { align: 'right' });
+
+  y += 14;
+  const matName = spool ? `${spool.material} ${spool.colorName || ''}`.trim() : 'Polimero tecnico 3D';
+  const mainTitle = quoteData.name || 'Prototipazione e Stampa 3D su specifica';
+  const techSpec = `Materiale: ${matName} · Peso stimato: ${nf(quoteData.grams, 0)} g · Tempo macchina: ${quoteData.hours}h ${quoteData.minutes}m`;
+
+  const extrasRow = r.rows.find(x => x.id === 'oth');
+  const extrasPrice = extrasRow ? extrasRow.price : 0;
+  const mainLineNet = Math.max(0, r.net - extrasPrice);
+
+  docPdf.setFont('helvetica', 'bold');
+  docPdf.setFontSize(10);
+  docPdf.setTextColor(...dark);
+  docPdf.text(mainTitle, 20, y);
+
+  docPdf.setFont('helvetica', 'normal');
+  docPdf.setFontSize(8.5);
+  docPdf.setTextColor(...muted);
+  docPdf.text(techSpec, 20, y + 5);
+
+  docPdf.setFont('helvetica', 'bold');
+  docPdf.setFontSize(10);
+  docPdf.setTextColor(...dark);
+  docPdf.text(eur(mainLineNet), 190, y + 2, { align: 'right' });
+
+  y += 10;
+  docPdf.setDrawColor(...lineCol);
+  docPdf.line(16, y, 194, y);
+
+  // Eventuali voci extra
+  const validExtras = (quoteData.extras || []).filter(x => x.label || num(x.amount) > 0);
+  if (validExtras.length > 0) {
+    const markMult = 1 + num(quoteData.markOther) / 100;
+    validExtras.forEach(ex => {
+      y += 7;
+      const exNet = num(ex.amount) * markMult;
+      docPdf.setFont('helvetica', 'normal');
+      docPdf.setFontSize(9.5);
+      docPdf.setTextColor(...dark);
+      docPdf.text(ex.label || 'Accessori / Viteria / Lavorazione extra', 20, y);
+      docPdf.text(eur(exNet), 190, y, { align: 'right' });
+      y += 4;
+      docPdf.line(16, y, 194, y);
+    });
+  }
+
+  // Riepilogo Totali (Destra)
+  y += 12;
+  const boxX = 118;
+  docPdf.setFont('helvetica', 'normal');
+  docPdf.setFontSize(9.5);
+  docPdf.setTextColor(...muted);
+  docPdf.text('Imponibile netto:', boxX, y);
+  docPdf.setTextColor(...dark);
+  docPdf.text(eur(r.net), 190, y, { align: 'right' });
+
+  y += 6.5;
+  docPdf.setTextColor(...muted);
+  docPdf.text(`IVA (${nf(num(quoteData.vat), 0)}%):`, boxX, y);
+  docPdf.setTextColor(...dark);
+  docPdf.text(eur(r.vat), 190, y, { align: 'right' });
+
+  y += 4.5;
+  docPdf.setFillColor(...accent);
+  docPdf.roundedRect(boxX - 4, y, 80, 11, 1.5, 1.5, 'F');
+  docPdf.setFont('helvetica', 'bold');
+  docPdf.setFontSize(11);
+  docPdf.setTextColor(255, 255, 255);
+  docPdf.text('TOTALE CLIENTE', boxX, y + 7.2);
+  docPdf.text(eur(r.total), 190, y + 7.2, { align: 'right' });
+
+  // Note e Condizioni
+  y += 24;
+  docPdf.setFont('helvetica', 'bold');
+  docPdf.setFontSize(8.5);
+  docPdf.setTextColor(...dark);
+  docPdf.text('NOTE E CONDIZIONI DI FORNITURA', 16, y);
+
+  docPdf.setFont('helvetica', 'normal');
+  docPdf.setFontSize(8.5);
+  docPdf.setTextColor(...muted);
+  const splitNotes = docPdf.splitTextToSize(s.quoteNotes || '', 178);
+  docPdf.text(splitNotes, 16, y + 5);
+
+  // Footer Carta Intestata
+  docPdf.setDrawColor(...lineCol);
+  docPdf.line(16, 276, 194, 276);
+  docPdf.setFontSize(8);
+  docPdf.setTextColor(...muted);
+  docPdf.text(`${s.companyName || 'ADLAB3D'} · ${s.companyTax || ''}`, 16, 282);
+  docPdf.text('Documento generato con ADLAB3D Cloud', 194, 282, { align: 'right' });
+
+  const safeName = (quoteData.name || 'Preventivo').replace(/[^a-zA-Z0-9_-]/g, '_');
+  docPdf.save(`${docNum}_${safeName}.pdf`);
+  toast('PDF su carta intestata scaricato!');
+}
+
+/* ================= 9. VISTE ================= */
 const ST = ['nuovo', 'da avviare', 'in stampa', 'pronto', 'consegnato'];
 const stClass = s => 'st-' + String(s).replace(/ /g, '-');
 const pill = s => `<span class="pill ${stClass(s)}">${esc(cap(s))}</span>`;
@@ -418,6 +660,7 @@ const V = {
             <td>${esc(cname(r.q?.customerId))}</td>
             <td class="mono">${eur(r.total)}</td>
             <td class="act">
+              <button class="btn ghost sm" data-action="pdfhist" data-id="${r.id}">PDF</button>
               <button class="btn ghost sm" data-action="loadq" data-id="${r.id}">Riapri</button>
               <button class="btn ghost sm" data-action="del" data-coll="quotes" data-id="${r.id}">Elimina</button>
             </td>
@@ -537,16 +780,33 @@ const V = {
   },
 
   impostazioni() {
+    const T = [
+      ['companyName', 'Intestazione / Brand'],
+      ['companyTagline', 'Sottotitolo / Slogan'],
+      ['companyAddress', 'Sede / Città'],
+      ['companyContacts', 'Contatti (Email / Tel / Web)'],
+      ['companyTax', 'Dicitura Fiscale / P.IVA'],
+      ['quoteNotes', 'Note standard in calce al PDF']
+    ];
     const F = [
       ['energy', 'Costo energia', '€/kWh'], ['prepMin', 'Preparazione default', 'min'], ['prepRate', 'Tariffa prep.', '€/h'],
       ['postMin', 'Post-processing default', 'min'], ['postRate', 'Tariffa post', '€/h'], ['markMat', 'Ricarico filamento', '%'],
       ['markEn', 'Ricarico elettricità', '%'], ['markLab', 'Ricarico manodopera', '%'], ['markMach', 'Ricarico macchina', '%'],
       ['markOther', 'Ricarico extra', '%'], ['minPrice', 'Prezzo minimo', '€'], ['vat', 'Aliquota IVA', '%']
     ];
-    return head('Impostazioni Globali', 'Valori predefiniti per tutti gli utenti (Solo Admin).') + `
-      <section class="sec"><div class="fgrid">
-        ${F.map(f => `<label class="fld"><span class="lbl">${f[1]}</span><div class="unit"><input type="number" step="any" data-st="${f[0]}" value="${esc(state.settings[f[0]])}"><span>${f[2]}</span></div></label>`).join('')}
-      </div></section>`;
+    return head('Impostazioni Globali', 'Dati carta intestata e parametri di calcolo (Solo Admin).') + `
+      <section class="sec" style="margin-bottom:16px">
+        <div class="sec-h"><h3>Carta Intestata PDF</h3></div>
+        <div class="fgrid">
+          ${T.map(f => `<label class="fld wide"><span class="lbl">${f[1]}</span><input type="text" data-st-text="${f[0]}" value="${esc(state.settings[f[0]] || '')}"></label>`).join('')}
+        </div>
+      </section>
+      <section class="sec">
+        <div class="sec-h"><h3>Parametri Calcolo Preventivi</h3></div>
+        <div class="fgrid">
+          ${F.map(f => `<label class="fld"><span class="lbl">${f[1]}</span><div class="unit"><input type="number" step="any" data-st="${f[0]}" value="${esc(state.settings[f[0]])}"><span>${f[2]}</span></div></label>`).join('')}
+        </div>
+      </section>`;
   }
 };
 
@@ -566,7 +826,7 @@ function route() {
   render();
 }
 
-/* ================= AZIONI & EVENTI ================= */
+/* ================= 10. AZIONI & EVENTI ================= */
 const ACTIONS = {
   theme() {
     const th = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
@@ -576,6 +836,11 @@ const ACTIONS = {
   newq() { q = newQuote(); render(); toast('Preventivo azzerato'); },
   addx() { q.extras.push({ label: '', amount: 0 }); $('#extras').innerHTML = extrasHTML(); updateSummary(); },
   delx(b) { q.extras.splice(+b.dataset.i, 1); $('#extras').innerHTML = extrasHTML(); updateSummary(); },
+  pdfq() { generateQuotePDF(q, todayISO()); },
+  pdfhist(b) {
+    const found = state.quotes.find(x => x.id === b.dataset.id);
+    if (found) generateQuotePDF(found.q, found.date, `PREV-${found.id.toUpperCase()}`);
+  },
   async saveq() {
     const r = calcQuote(q);
     await saveDoc('quotes', { id: uid(), date: todayISO(), q: clone(q), net: r.net, total: r.total });
@@ -753,6 +1018,13 @@ $('#view').addEventListener('change', async e => {
       Object.assign(q, { spoolPrice: s.price, spoolWeight: s.weight });
       render();
     }
+    return;
+  }
+
+  if (t.dataset.stText && userRole === 'admin') {
+    state.settings[t.dataset.stText] = t.value;
+    await setDoc(doc(db, 'settings', 'global'), state.settings, { merge: true });
+    toast('Intestazione PDF salvata');
     return;
   }
 
