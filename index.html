@@ -23,10 +23,25 @@
       </div>
       
       <form id="auth-form" class="auth-form">
-        <label class="fld"><span class="lbl">Email</span><input type="email" id="auth-email" required placeholder="nome@adlab3d.it"></label>
-        <label class="fld"><span class="lbl">Password</span><input type="password" id="auth-password" required placeholder="••••••••"></label>
+        <label class="fld">
+          <span class="lbl">Email</span>
+          <input type="email" id="auth-email" required placeholder="nome@adlab3d.it" autocomplete="email">
+        </label>
+
+        <label class="fld" id="pwd-field">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span class="lbl">Password</span>
+            <button type="button" id="forgot-pwd-btn" class="link-btn">Password dimenticata?</button>
+          </div>
+          <div class="unit" style="padding-right:4px">
+            <input type="password" id="auth-password" required placeholder="••••••••" autocomplete="current-password">
+            <button type="button" id="toggle-pwd-vis" class="btn ghost sm" title="Mostra/Nascondi password" aria-label="Mostra password">👁️</button>
+          </div>
+        </label>
+
         <div id="auth-error" class="auth-error"></div>
         <div id="auth-success" class="auth-success"></div>
+
         <div class="auth-actions">
           <button class="btn pri w-full" type="submit" id="auth-submit">Accedi</button>
           <button class="btn ghost w-full sm" type="button" id="auth-toggle-btn">Non hai un account? Registrati</button>

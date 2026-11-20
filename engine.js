@@ -1,4 +1,3 @@
-
 export function num(v) {
   const n = parseFloat(v);
   return Number.isFinite(n) ? n : 0;
@@ -26,7 +25,7 @@ export function parseGcode(txt) {
     /;\s*estimated printing time \(normal mode\)\s*[=:]\s*([^\r\n;]+)/i,
     /;\s*total estimated time\s*[=:]\s*([^\r\n;]+)/i,
     /;\s*model printing time\s*[=:]\s*([^\r\n;]+)/i,
-    /;TIME:(\d+)/i // Cura (secondi)
+    /;TIME:(\d+)/i
   ];
   for (let i = 0; i < tre.length; i++) {
     const m = txt.match(tre[i]);

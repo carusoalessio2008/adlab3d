@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword,
-  createUserWithEmailAndPassword, signOut
+  createUserWithEmailAndPassword, sendPasswordResetEmail, signOut
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, setDoc, deleteDoc, getDoc,
@@ -36,7 +36,7 @@ const state = {
 
 let q = null;
 let view = 'panoramica';
-let isSignUp = false;
+let authMode = 'login';
 let userRole = 'user';
 let activeModalCallback = null;
 let unsubscribers = [];
@@ -62,13 +62,49 @@ function toast(msg) {
 }
 
 /* ================= AUTHENTICATION ================= */
-$('#auth-toggle-btn').addEventListener('click', () => {
-  isSignUp = !isSignUp;
+function setAuthMode(mode) {
+  authMode = mode;
   $('#auth-error').style.display = 'none';
   $('#auth-success').style.display = 'none';
-  $('#auth-title').textContent = isSignUp ? 'Crea un account ADLAB3D' : 'Accedi al gestionale cloud';
-  $('#auth-submit').textContent = isSignUp ? 'Registrati ora' : 'Accedi';
-  $('#auth-toggle-btn').textContent = isSignUp ? 'Hai già un account? Accedi' : 'Non hai un account? Registrati';
+
+  const pwdField = $('#pwd-field');
+  const pwdInput = $('#auth-password');
+  const forgotBtn = $('#forgot-pwd-btn');
+
+  if (mode === 'reset') {
+    $('#auth-title').textContent = 'Recupera la tua password';
+    $('#auth-submit').textContent = 'Invia link di recupero';
+    $('#auth-toggle-btn').textContent = '← Torna al login';
+    pwdField.style.display = 'none';
+    pwdInput.required = false;
+  } else if (mode === 'signup') {
+    $('#auth-title').textContent = 'Crea un account ADLAB3D';
+    $('#auth-submit').textContent = 'Registrati ora';
+    $('#auth-toggle-btn').textContent = 'Hai già un account? Accedi';
+    pwdField.style.display = 'flex';
+    pwdInput.required = true;
+    forgotBtn.style.display = 'none';
+  } else {
+    $('#auth-title').textContent = 'Accedi al gestionale cloud';
+    $('#auth-submit').textContent = 'Accedi';
+    $('#auth-toggle-btn').textContent = 'Non hai un account? Registrati';
+    pwdField.style.display = 'flex';
+    pwdInput.required = true;
+    forgotBtn.style.display = 'inline';
+  }
+}
+
+$('#forgot-pwd-btn').addEventListener('click', () => setAuthMode('reset'));
+
+$('#auth-toggle-btn').addEventListener('click', () => {
+  setAuthMode(authMode === 'login' ? 'signup' : 'login');
+});
+
+$('#toggle-pwd-vis').addEventListener('click', () => {
+  const inp = $('#auth-password');
+  const isHidden = inp.type === 'password';
+  inp.type = isHidden ? 'text' : 'password';
+  $('#toggle-pwd-vis').textContent = isHidden ? '🙈' : '👁️';
 });
 
 $('#auth-form').addEventListener('submit', async (e) => {
@@ -84,7 +120,12 @@ $('#auth-form').addEventListener('submit', async (e) => {
   btn.disabled = true;
 
   try {
-    if (isSignUp) {
+    if (authMode === 'reset') {
+      auth.languageCode = 'it';
+      await sendPasswordResetEmail(auth, email);
+      okBox.textContent = 'Email inviata! Controlla la posta (anche nello Spam) per reimpostare la password.';
+      okBox.style.display = 'block';
+    } else if (authMode === 'signup') {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       await setDoc(doc(db, 'users', cred.user.uid), { email, role: 'user', createdAt: todayISO() });
       okBox.textContent = 'Account creato con successo!';
@@ -93,7 +134,18 @@ $('#auth-form').addEventListener('submit', async (e) => {
       await signInWithEmailAndPassword(auth, email, password);
     }
   } catch (err) {
-    errBox.textContent = err.message.replace('Firebase:', '').trim();
+    const code = err.code || '';
+    let msg = 'Errore durante l\'operazione.';
+    if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
+      msg = 'Email o password non corretti.';
+    } else if (code === 'auth/too-many-requests') {
+      msg = 'Troppi tentativi falliti. Riprova tra qualche minuto o reimposta la password.';
+    } else if (code === 'auth/weak-password') {
+      msg = 'La password deve avere almeno 6 caratteri.';
+    } else if (code === 'auth/email-already-in-use') {
+      msg = 'Questa email è già registrata.';
+    }
+    errBox.textContent = msg;
     errBox.style.display = 'block';
   } finally {
     btn.disabled = false;
@@ -109,6 +161,7 @@ onAuthStateChanged(auth, async (user) => {
   if (!user) {
     $('#auth-screen').style.display = 'flex';
     $('#app-container').style.display = 'none';
+    setAuthMode('login');
     return;
   }
 
@@ -116,7 +169,6 @@ onAuthStateChanged(auth, async (user) => {
   $('#app-container').style.display = 'block';
   $('#user-email-display').textContent = user.email;
 
-  // Controllo ruolo Admin
   const userSnap = await getDoc(doc(db, 'users', user.uid));
   if (userSnap.exists()) {
     userRole = userSnap.data().role || 'user';
@@ -134,13 +186,11 @@ onAuthStateChanged(auth, async (user) => {
 
 /* ================= FIRESTORE REAL-TIME SYNC ================= */
 function startRealtimeSync() {
-  // Settings globali
   unsubscribers.push(onSnapshot(doc(db, 'settings', 'global'), (snap) => {
     if (snap.exists()) Object.assign(state.settings, snap.data());
     if (view === 'impostazioni') render();
   }));
 
-  // Collezioni
   const colls = ['customers', 'printers', 'spools', 'orders', 'quotes', 'movements', 'files'];
   colls.forEach(c => {
     const qRef = query(collection(db, c), orderBy('createdAt', 'desc'));
@@ -148,7 +198,6 @@ function startRealtimeSync() {
       state[c] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       render();
     }, () => {
-      // Fallback senza orderBy se mancano campi createdAt su vecchi doc
       onSnapshot(collection(db, c), (snap) => {
         state[c] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         render();
@@ -653,7 +702,6 @@ document.addEventListener('click', e => {
   if (fn) fn(b);
 });
 
-// Input live preventivo & extra
 $('#view').addEventListener('input', e => {
   const t = e.target;
   if (t.dataset.qk !== undefined) {
@@ -665,11 +713,9 @@ $('#view').addEventListener('input', e => {
   }
 });
 
-// Cambio select stampante/bobina, upload G-code e modifiche tabelle
 $('#view').addEventListener('change', async e => {
   const t = e.target;
 
-  // Upload G-Code
   if (t.id === 'gcode' && t.files[0]) {
     const txt = await t.files[0].text();
     const parsed = parseGcode(txt);
@@ -693,7 +739,6 @@ $('#view').addEventListener('change', async e => {
     return;
   }
 
-  // Selezione stampante o bobina nel preventivo
   if (t.dataset.qk === 'printerId') {
     const p = state.printers.find(x => x.id === t.value);
     if (p) {
@@ -711,7 +756,6 @@ $('#view').addEventListener('change', async e => {
     return;
   }
 
-  // Impostazioni Admin
   if (t.dataset.st && userRole === 'admin') {
     state.settings[t.dataset.st] = num(t.value);
     await setDoc(doc(db, 'settings', 'global'), state.settings, { merge: true });
@@ -719,7 +763,6 @@ $('#view').addEventListener('change', async e => {
     return;
   }
 
-  // Modifica inline nelle tabelle + Scarico magazzino automatico
   if (t.dataset.coll) {
     const coll = t.dataset.coll;
     const it = state[coll].find(x => x.id === t.dataset.id);
